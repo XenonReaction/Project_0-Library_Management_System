@@ -1,0 +1,318 @@
+Project Plan - Library Management System (Console, Java)
+
+1. Project Overview
+-------------------
+Goal:
+    Build a console-based Library Management System in Java that demonstrates:
+        - 3-tier architecture (Controller, Service, Repository)
+        - Persistence via SQL database (embedded or external)
+        - A many-to-many relationship between Books and Members using a Loan table
+        - Proper separation of concerns and error handling
+        - Unit testing with mocked repository layer
+
+High-Level Features (v1):
+    - Manage Books: add, list, update (basic), delete (optional)
+    - Manage Members: add, list, update (basic), delete (optional)
+    - Check out a book (create Loan)
+    - Return a book (mark Loan as returned)
+    - Prevent checkout if the selected Book copy is currently checked out
+    - Show all loans for a specific Member
+    - Show all currently loaned-out books
+    - Show overdue loans (based on due_date and current date)
+    - Application runs until the user chooses "Exit"
+    - Validate console input and handle errors gracefully
+
+Assumptions:
+    - Each row in the Books table represents a *single physical copy* of a book.
+      Multiple copies of the same title will be separate Book rows with the same title/author but different IDs.
+    - A Book is considered "checked out" if it has an active Loan record:
+        Loan.return_date IS NULL
+    - Overdue definition:
+        A Loan is overdue if:
+            return_date IS NULL AND due_date < current_date
+
+2. Technology Stack
+-------------------
+Language:
+    - Java (Oracle OpenJDK 25.0.1)
+
+Build Tool:
+    - Maven
+
+Database:
+    Option A (preferred for simplicity):
+        - Embedded SQL database (H2 or SQLite)
+        - File-based DB stored locally with the project
+    Option B:
+        - External SQL DB (e.g., MySQL or PostgreSQL) with JDBC connection
+
+Persistence:
+    - JDBC-based Repository layer
+    - SQL schema normalized to at least 3NF
+
+Testing:
+    - JUnit 5
+    - Mockito (for mocking Repositories in Service tests)
+
+3. Architecture & Package Structure
+-----------------------------------
+3-Tier Structure:
+    - Controller: user input/output, console menus
+    - Service: business logic, validation, coordination
+    - Repository: persistence, DB access (DAO pattern)
+
+Proposed package structure (Java):
+    com.example.library
+        - controller
+            - MainMenuController
+            - BookController
+            - MemberController
+            - LoanController
+        - service
+            - BookService
+            - MemberService
+            - LoanService
+        - repository
+            - BookRepository
+            - MemberRepository
+            - LoanRepository
+            - impl
+                - JdbcBookRepository
+                - JdbcMemberRepository
+                - JdbcLoanRepository
+        - model
+            - Book
+            - Member
+            - Loan
+        - util
+            - DbConnectionUtil
+            - InputUtil (optional helper for console input)
+            - DateUtil (optional helper for date parsing/formatting)
+        - config
+            - AppConfig (wiring services and repositories, DB URL, etc.)
+
+4. Data Model & SQL Schema
+--------------------------
+Entities / Models:
+    1) Book
+        Fields (Java):
+            - int id
+            - String title
+            - String author
+            - String isbn (optional)
+            - int publicationYear (optional)
+
+        SQL table: books
+            - id              INT PRIMARY KEY AUTO_INCREMENT (or IDENTITY)
+            - title           VARCHAR(...)
+            - author          VARCHAR(...)
+            - isbn            VARCHAR(...) NULL
+            - publication_year INT NULL
+
+    2) Member
+        Fields (Java):
+            - int id
+            - String name
+            - String email
+            - String phone (optional)
+
+        SQL table: members
+            - id      INT PRIMARY KEY AUTO_INCREMENT
+            - name    VARCHAR(...)
+            - email   VARCHAR(...) NULL UNIQUE (optional)
+            - phone   VARCHAR(...) NULL
+
+    3) Loan  (junction table for many-to-many)
+        Fields (Java):
+            - int id
+            - int bookId
+            - int memberId
+            - LocalDate checkoutDate
+            - LocalDate dueDate
+            - LocalDate returnDate (nullable)
+
+        SQL table: loans
+            - id             INT PRIMARY KEY AUTO_INCREMENT
+            - book_id        INT NOT NULL
+            - member_id      INT NOT NULL
+            - checkout_date  DATE NOT NULL
+            - due_date       DATE NOT NULL
+            - return_date    DATE NULL
+            - FOREIGN KEY (book_id) REFERENCES books(id)
+            - FOREIGN KEY (member_id) REFERENCES members(id)
+
+Many-to-Many Relationship:
+    - Members and Books have a many-to-many relationship through the Loan table.
+    - One Member can have many Loans to many Books.
+    - One Book can be loaned many times to different Members over time.
+
+3NF Notes:
+    - Each table has a primary key.
+    - Non-key attributes depend on the whole key (loans depends on loan id; books depends on id; members depends on id).
+    - No non-key attributes depending on other non-key attributes.
+
+5. Console Interaction Design
+-----------------------------
+Main application loop:
+    - Display main menu:
+        1. Manage Books
+        2. Manage Members
+        3. Manage Loans
+        0. Exit
+    - Read user input
+    - Route to corresponding controller method
+    - Loop until user selects 0 (Exit)
+
+Sub-menus (examples):
+
+    Manage Books:
+        1. Add Book
+        2. List All Books
+        3. Update Book (optional)
+        4. Delete Book (optional)
+        0. Back to Main Menu
+
+    Manage Members:
+        1. Add Member
+        2. List All Members
+        3. Update Member (optional)
+        4. Delete Member (optional)
+        0. Back to Main Menu
+
+    Manage Loans:
+        1. Check Out Book
+        2. Return Book
+        3. List Loans by Member
+        4. List All Active Loans (loaned-out books)
+        5. List Overdue Loans
+        0. Back to Main Menu
+
+Error Handling (Console):
+    - Handle invalid menu selection (e.g., non-existing option)
+    - Handle non-numeric input where numbers are expected
+    - Handle cases where IDs do not exist (e.g., book not found, member not found)
+    - Handle attempts to check out a book that is already checked out
+    - Display clear error messages and re-prompt the user
+
+6. Service Layer Responsibilities
+---------------------------------
+BookService:
+    - addBook(Book book)
+    - getAllBooks()
+    - findBookById(int id)
+    - updateBook(Book book) (optional)
+    - deleteBook(int id) (optional)
+
+MemberService:
+    - addMember(Member member)
+    - getAllMembers()
+    - findMemberById(int id)
+    - updateMember(Member member) (optional)
+    - deleteMember(int id) (optional)
+
+LoanService:
+    - checkOutBook(int memberId, int bookId, LocalDate checkoutDate)
+        - Validate that member exists
+        - Validate that book exists
+        - Check if book is already checked out (active loan with return_date IS NULL)
+        - If available:
+            - Create Loan with:
+                checkout_date = given or current date
+                due_date = checkout_date + DEFAULT_LOAN_PERIOD_DAYS (e.g., 14)
+                return_date = null
+    - returnBook(int loanId, LocalDate returnDate)
+        - Validate that loan exists and is currently active
+        - Set return_date
+    - getLoansByMember(int memberId)
+    - getActiveLoans()
+    - getOverdueLoans(LocalDate currentDate)
+
+Loan Rules:
+    - Multiple copies:
+        - Represented by multiple Book rows with same title/author
+    - Availability:
+        - Book is "checked out" if an active Loan exists with return_date IS NULL for that book_id
+    - No complex rules about maximum number of loans per member or fines
+
+7. Repository Layer Design
+--------------------------
+Repository interfaces (decoupled from implementation):
+
+    interface BookRepository {
+        Book save(Book book);
+        Optional<Book> findById(int id);
+        List<Book> findAll();
+        void update(Book book);
+        void deleteById(int id);
+    }
+
+    interface MemberRepository {
+        Member save(Member member);
+        Optional<Member> findById(int id);
+        List<Member> findAll();
+        void update(Member member);
+        void deleteById(int id);
+    }
+
+    interface LoanRepository {
+        Loan save(Loan loan);
+        Optional<Loan> findById(int id);
+        List<Loan> findAll();
+        List<Loan> findByMemberId(int memberId);
+        List<Loan> findActiveLoans();
+        List<Loan> findOverdueLoans(LocalDate currentDate);
+        void update(Loan loan);
+    }
+
+JDBC Implementations:
+    - JdbcBookRepository: executes SQL statements against "books" table
+    - JdbcMemberRepository: executes SQL statements against "members" table
+    - JdbcLoanRepository: executes SQL statements against "loans" table
+
+DbConnectionUtil:
+    - Provides a method like:
+        Connection getConnection()
+    - Uses JDBC URL, username, password (if needed)
+
+8. Unit Testing Plan
+--------------------
+Frameworks:
+    - JUnit 5
+    - Mockito for mocking repositories
+
+Focus:
+    - Test the Service layer, mocking the Repository interfaces
+
+Example tests (at least 10):
+    1. checkOutBook_successful_whenBookAvailable()
+    2. checkOutBook_throwsException_whenBookNotFound()
+    3. checkOutBook_throwsException_whenMemberNotFound()
+    4. checkOutBook_throwsException_whenBookAlreadyCheckedOut()
+    5. returnBook_successful_whenLoanActive()
+    6. returnBook_throwsException_whenLoanNotFound()
+    7. getOverdueLoans_returnsEmptyList_whenNoneOverdue()
+    8. getOverdueLoans_returnsCorrectLoans_whenSomeOverdue()
+    9. getLoansByMember_returnsLoansForExistingMember()
+    10. getLoansByMember_returnsEmptyList_forMemberWithNoLoans()
+
+TDD Target Method:
+    - Implement LoanService.checkOutBook(...) using Test-Driven Development:
+        Step 1: Write tests for successful checkout and failure cases
+        Step 2: Implement the method to satisfy tests
+        Step 3: Refactor if needed
+
+9. Timeline & Priorities
+------------------------
+Priority order (to satisfy rubric first):
+    1. Set up project structure (Maven, packages, main class)
+    2. Define model classes (Book, Member, Loan)
+    3. Set up DB connection and create tables
+    4. Implement Repositories (basic CRUD)
+    5. Implement Services (BookService, MemberService, LoanService core methods)
+    6. Implement console Controllers and menus
+    7. Add input validation and error handling
+    8. Write unit tests with mocked repositories (at least 10 tests)
+    9. Polish console messages and documentation
+    10. Push project to public Git repo
+
+End of Project Plan
