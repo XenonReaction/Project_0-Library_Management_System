@@ -72,14 +72,11 @@ Proposed package structure (Java):
             - BookService
             - MemberService
             - LoanService
-        - repository
-            - BookRepository
-            - MemberRepository
-            - LoanRepository
-            - impl
-                - JdbcBookRepository
-                - JdbcMemberRepository
-                - JdbcLoanRepository
+        - DAO
+            - BookDAO
+            - MemberDAO
+            - LoanDAO
+            - BaseDAO
         - model
             - Book
             - Member
