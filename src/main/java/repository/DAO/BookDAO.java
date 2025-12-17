@@ -1,7 +1,7 @@
 package repository.DAO;
 
 import repository.entities.BookEntity;
-import service.DAO.BaseDAO;
+import repository.DAO.BaseDAO;
 import util.DbConnectionUtil;
 
 import java.sql.*;

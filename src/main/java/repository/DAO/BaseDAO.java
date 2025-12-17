@@ -1,4 +1,4 @@
-package service.DAO;
+package repository.DAO;
 
 import java.util.List;
 import java.util.Optional;
