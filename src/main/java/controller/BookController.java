@@ -1,16 +1,24 @@
 package controller;
 
+import service.BookService;
+import service.models.Book;
 import util.InputUtil;
 
-// TODO (later): import service.BookService;
-// TODO (later): import service.Book;
+import java.util.List;
+import java.util.Optional;
 
 public class BookController {
 
-    // TODO (later): private final BookService bookService;
+    private final BookService bookService;
 
     public BookController() {
-        // TODO (later): this.bookService = new BookService();
+        this.bookService = new BookService();
+    }
+
+    // Optional: for unit tests (inject a mocked service)
+    public BookController(BookService bookService) {
+        if (bookService == null) throw new IllegalArgumentException("bookService cannot be null.");
+        this.bookService = bookService;
     }
 
     public void handleInput() {
@@ -47,91 +55,150 @@ public class BookController {
         System.out.println();
         System.out.println("=== ALL BOOKS ===");
 
-        // TODO (later):
-        // bookService.findAll().forEach(System.out::println);
+        try {
+            List<Book> books = bookService.getAll();
+            if (books.isEmpty()) {
+                System.out.println("No books found.");
+                return;
+            }
 
-        System.out.println("(TODO) Service layer not implemented yet.");
+            books.forEach(System.out::println);
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error retrieving books: " + ex.getMessage());
+        }
     }
 
     private void addBook() {
         System.out.println();
         System.out.println("=== ADD BOOK ===");
 
-        String title = InputUtil.readString("Title: ");
-        String author = InputUtil.readString("Author: ");
+        try {
+            String title = InputUtil.readString("Title: ");
+            String author = InputUtil.readString("Author: ");
 
-        String isbn = InputUtil.readString("ISBN (blank for none): ");
-        if (isbn != null && isbn.isBlank()) isbn = null;
+            // NOTE: InputUtil.readString() does NOT allow blank input.
+            // So we use a sentinel value to represent "no value".
+            String isbnInput = InputUtil.readString("ISBN (type NONE if not applicable): ");
+            String isbn = parseOptionalString(isbnInput);
 
-        String yearStr = InputUtil.readString("Publication year (blank for none): ");
-        Integer year = null;
-        if (yearStr != null && !yearStr.isBlank()) {
-            try {
-                year = Integer.parseInt(yearStr.trim());
-            } catch (NumberFormatException e) {
-                System.out.println("Invalid year. Leaving blank.");
-            }
+            int yearInput = InputUtil.readInt("Publication year (enter 0 if not applicable): ");
+            Integer year = (yearInput <= 0) ? null : yearInput;
+
+            Book book = new Book(title, author, isbn, year);
+            Long id = bookService.create(book);
+
+            System.out.println("Saved book with id=" + id);
+
+        } catch (IllegalArgumentException ex) {
+            // ValidationUtil throws IllegalArgumentException for invalid fields
+            System.out.println("Could not add book: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            System.out.println("Error adding book: " + ex.getMessage());
         }
-
-        // TODO (later):
-        // Book book = new Book(title, author, isbn, year);
-        // Book saved = bookService.create(book);
-        // System.out.println("Saved: " + saved);
-
-        System.out.println("(TODO) Would create book: " + title + " by " + author);
     }
 
     private void findBookById() {
         System.out.println();
         System.out.println("=== FIND BOOK ===");
 
-        int id = InputUtil.readInt("Book ID: ");
+        long id = InputUtil.readInt("Book ID: ");
 
-        // TODO (later):
-        // bookService.findById(id)
-        //     .ifPresentOrElse(
-        //         System.out::println,
-        //         () -> System.out.println("No book found with id=" + id)
-        //     );
+        try {
+            Optional<Book> maybeBook = bookService.getById(id);
+            if (maybeBook.isEmpty()) {
+                System.out.println("No book found with id=" + id);
+                return;
+            }
 
-        System.out.println("(TODO) Would look up book with id=" + id);
+            System.out.println(maybeBook.get());
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error finding book: " + ex.getMessage());
+        }
     }
 
     private void updateBook() {
         System.out.println();
         System.out.println("=== UPDATE BOOK ===");
 
-        int id = InputUtil.readInt("Book ID to update: ");
+        long id = InputUtil.readInt("Book ID to update: ");
 
-        // TODO (later):
-        // var maybeBook = bookService.findById(id);
-        // if (maybeBook.isEmpty()) { ... }
-        // Book book = maybeBook.get();
+        try {
+            Optional<Book> maybeExisting = bookService.getById(id);
+            if (maybeExisting.isEmpty()) {
+                System.out.println("No book found with id=" + id);
+                return;
+            }
 
-        String newTitle = InputUtil.readString("New title (blank to keep): ");
-        String newAuthor = InputUtil.readString("New author (blank to keep): ");
-        String newIsbn = InputUtil.readString("New ISBN (blank to keep, type NULL to clear): ");
-        String newYearStr = InputUtil.readString("New publication year (blank to keep, type NULL to clear): ");
+            Book existing = maybeExisting.get();
+            System.out.println("Current: " + existing);
+            System.out.println();
+            System.out.println("Update rules:");
+            System.out.println("- For title/author: enter '-' to keep current.");
+            System.out.println("- For ISBN: enter '-' to keep current, or 'NONE' to clear.");
+            System.out.println("- For year: enter -1 to keep current, 0 to clear, or a valid year.");
 
-        // TODO (later):
-        // if (!newTitle.isBlank()) book.setTitle(newTitle);
-        // if (!newAuthor.isBlank()) book.setAuthor(newAuthor);
-        // if (!newIsbn.isBlank()) { if ("NULL".equalsIgnoreCase(newIsbn)) book.setIsbn(null); else book.setIsbn(newIsbn); }
-        // if (!newYearStr.isBlank()) { ...parse int or clear... }
-        // bookService.update(book);
+            String titleInput = InputUtil.readString("New title: ");
+            String authorInput = InputUtil.readString("New author: ");
+            String isbnInput = InputUtil.readString("New ISBN: ");
+            int yearInput = InputUtil.readInt("New publication year: ");
 
-        System.out.println("(TODO) Would update book id=" + id);
+            // Build an updated model (service expects full required fields for update)
+            Book updated = new Book();
+            updated.setTitle("-".equals(titleInput) ? existing.getTitle() : titleInput);
+            updated.setAuthor("-".equals(authorInput) ? existing.getAuthor() : authorInput);
+
+            if ("-".equals(isbnInput)) {
+                updated.setIsbn(existing.getIsbn());
+            } else {
+                updated.setIsbn(parseOptionalString(isbnInput)); // "NONE" -> null
+            }
+
+            if (yearInput == -1) {
+                updated.setPublicationYear(existing.getPublicationYear());
+            } else if (yearInput == 0) {
+                updated.setPublicationYear(null);
+            } else {
+                updated.setPublicationYear(yearInput);
+            }
+
+            Book result = bookService.update(id, updated);
+            System.out.println("Updated: " + result);
+
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Could not update book: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            System.out.println("Error updating book: " + ex.getMessage());
+        }
     }
 
     private void deleteBook() {
         System.out.println();
         System.out.println("=== DELETE BOOK ===");
 
-        int id = InputUtil.readInt("Book ID to delete: ");
+        long id = InputUtil.readInt("Book ID to delete: ");
 
-        // TODO (later):
-        // bookService.deleteById(id);
+        try {
+            boolean deleted = bookService.delete(id);
+            if (deleted) {
+                System.out.println("Deleted book id=" + id);
+            } else {
+                System.out.println("No book found with id=" + id + " (nothing deleted).");
+            }
+        } catch (RuntimeException ex) {
+            System.out.println("Error deleting book: " + ex.getMessage());
+        }
+    }
 
-        System.out.println("(TODO) Would delete book id=" + id);
+    /**
+     * Converts sentinel strings into a nullable value.
+     * Because InputUtil.readString() disallows blank, we use "NONE" to mean null.
+     */
+    private static String parseOptionalString(String input) {
+        if (input == null) return null;
+        String trimmed = input.trim();
+        if (trimmed.equalsIgnoreCase("NONE")) return null;
+        return trimmed;
     }
 }

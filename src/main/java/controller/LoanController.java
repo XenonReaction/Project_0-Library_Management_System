@@ -1,18 +1,25 @@
 package controller;
 
+import service.LoanService;
+import service.models.Loan;
 import util.InputUtil;
 
 import java.time.LocalDate;
-
-// TODO (later): import service.LoanService;
-// TODO (later): import service.Loan;
+import java.util.List;
+import java.util.Optional;
 
 public class LoanController {
 
-    // TODO (later): private final LoanService loanService;
+    private final LoanService loanService;
 
     public LoanController() {
-        // TODO (later): this.loanService = new LoanService();
+        this.loanService = new LoanService();
+    }
+
+    // Optional: for unit tests (inject a mocked service)
+    public LoanController(LoanService loanService) {
+        if (loanService == null) throw new IllegalArgumentException("loanService cannot be null.");
+        this.loanService = loanService;
     }
 
     public void handleInput() {
@@ -55,113 +62,174 @@ public class LoanController {
         System.out.println();
         System.out.println("=== ALL LOANS ===");
 
-        // TODO (later):
-        // loanService.findAll().forEach(System.out::println);
+        try {
+            List<Loan> loans = loanService.getAll();
+            if (loans.isEmpty()) {
+                System.out.println("No loans found.");
+                return;
+            }
 
-        System.out.println("(TODO) Service layer not implemented yet.");
+            loans.forEach(System.out::println);
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error retrieving loans: " + ex.getMessage());
+        }
     }
 
     private void checkoutBook() {
         System.out.println();
         System.out.println("=== CHECKOUT BOOK ===");
 
-        long bookId = InputUtil.readInt("Book ID: ");
-        long memberId = InputUtil.readInt("Member ID: ");
+        try {
+            long bookId = InputUtil.readInt("Book ID: ");
+            long memberId = InputUtil.readInt("Member ID: ");
 
-        String daysStr = InputUtil.readString("Loan length in days (default 14): ");
-        int days = 14;
-        if (daysStr != null && !daysStr.isBlank()) {
-            try {
-                days = Integer.parseInt(daysStr.trim());
-            } catch (NumberFormatException e) {
-                System.out.println("Invalid number. Using 14 days.");
-            }
+            System.out.println("Loan length rules:");
+            System.out.println("- Enter 0 to use the default (14 days).");
+            System.out.println("- Enter a positive number of days.");
+
+            int daysInput = InputUtil.readInt("Loan length in days: ");
+            int days = (daysInput <= 0) ? 14 : daysInput;
+
+            LocalDate checkoutDate = LocalDate.now();
+            LocalDate dueDate = checkoutDate.plusDays(days);
+
+            // Service-layer-friendly model: create a Loan model and let the service persist it
+            Loan loan = new Loan();
+            loan.setBookId(bookId);
+            loan.setMemberId(memberId);
+            loan.setCheckoutDate(checkoutDate);
+            loan.setDueDate(dueDate);
+            loan.setReturnDate(null);
+
+            Long id = loanService.checkout(loan);
+
+            System.out.println("Checkout successful. Created loan id=" + id);
+            System.out.println("Due date: " + dueDate);
+
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Could not checkout book: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            System.out.println("Error checking out book: " + ex.getMessage());
         }
-
-        LocalDate checkoutDate = LocalDate.now();
-        LocalDate dueDate = checkoutDate.plusDays(days);
-
-        // TODO (later):
-        // Loan loan = new Loan(bookId, memberId, checkoutDate, dueDate, null);
-        // Loan created = loanService.checkout(loan);
-        // System.out.println("Created: " + created);
-
-        System.out.println("(TODO) Would checkout bookId=" + bookId + " to memberId=" + memberId +
-                " due " + dueDate);
     }
 
     private void returnBook() {
         System.out.println();
         System.out.println("=== RETURN BOOK ===");
 
-        int loanId = InputUtil.readInt("Loan ID to return: ");
-        LocalDate returnDate = LocalDate.now();
+        try {
+            long loanId = InputUtil.readInt("Loan ID to return: ");
+            LocalDate returnDate = LocalDate.now();
 
-        // TODO (later):
-        // loanService.returnLoan(loanId, returnDate);
+            boolean returned = loanService.returnLoan(loanId, returnDate);
+            if (returned) {
+                System.out.println("Return successful for loan id=" + loanId + " on " + returnDate);
+            } else {
+                System.out.println("No active loan found with id=" + loanId + " (nothing returned).");
+            }
 
-        System.out.println("(TODO) Would return loanId=" + loanId + " on " + returnDate);
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Could not return loan: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            System.out.println("Error returning book: " + ex.getMessage());
+        }
     }
 
     private void findLoanById() {
         System.out.println();
         System.out.println("=== FIND LOAN ===");
 
-        int id = InputUtil.readInt("Loan ID: ");
+        long id = InputUtil.readInt("Loan ID: ");
 
-        // TODO (later):
-        // loanService.findById(id)
-        //     .ifPresentOrElse(
-        //         System.out::println,
-        //         () -> System.out.println("No loan found with id=" + id)
-        //     );
+        try {
+            Optional<Loan> maybeLoan = loanService.getById(id);
+            if (maybeLoan.isEmpty()) {
+                System.out.println("No loan found with id=" + id);
+                return;
+            }
 
-        System.out.println("(TODO) Would look up loan with id=" + id);
+            System.out.println(maybeLoan.get());
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error finding loan: " + ex.getMessage());
+        }
     }
 
     private void deleteLoan() {
         System.out.println();
         System.out.println("=== DELETE LOAN ===");
 
-        int id = InputUtil.readInt("Loan ID to delete: ");
+        long id = InputUtil.readInt("Loan ID to delete: ");
 
-        // TODO (later):
-        // loanService.deleteById(id);
-
-        System.out.println("(TODO) Would delete loan id=" + id);
+        try {
+            boolean deleted = loanService.delete(id);
+            if (deleted) {
+                System.out.println("Deleted loan id=" + id);
+            } else {
+                System.out.println("No loan found with id=" + id + " (nothing deleted).");
+            }
+        } catch (RuntimeException ex) {
+            System.out.println("Error deleting loan: " + ex.getMessage());
+        }
     }
 
     private void listActiveLoans() {
         System.out.println();
         System.out.println("=== ACTIVE LOANS ===");
 
-        // TODO (later):
-        // loanService.findActiveLoans().forEach(System.out::println);
+        try {
+            List<Loan> loans = loanService.getActiveLoans();
+            if (loans.isEmpty()) {
+                System.out.println("No active loans found.");
+                return;
+            }
 
-        System.out.println("(TODO) Would list active loans.");
+            loans.forEach(System.out::println);
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error retrieving active loans: " + ex.getMessage());
+        }
     }
 
     private void listLoansByMember() {
         System.out.println();
         System.out.println("=== LOANS BY MEMBER ===");
 
-        int memberId = InputUtil.readInt("Member ID: ");
+        long memberId = InputUtil.readInt("Member ID: ");
 
-        // TODO (later):
-        // loanService.findLoansByMemberId(memberId).forEach(System.out::println);
+        try {
+            List<Loan> loans = loanService.getLoansByMemberId(memberId);
+            if (loans.isEmpty()) {
+                System.out.println("No loans found for memberId=" + memberId);
+                return;
+            }
 
-        System.out.println("(TODO) Would list loans for memberId=" + memberId);
+            loans.forEach(System.out::println);
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error retrieving loans for member: " + ex.getMessage());
+        }
     }
 
     private void listOverdueLoans() {
         System.out.println();
         System.out.println("=== OVERDUE LOANS ===");
 
-        LocalDate today = LocalDate.now();
+        try {
+            LocalDate today = LocalDate.now();
+            List<Loan> loans = loanService.getOverdueLoans(today);
 
-        // TODO (later):
-        // loanService.findOverdueLoans(today).forEach(System.out::println);
+            if (loans.isEmpty()) {
+                System.out.println("No overdue loans as of " + today);
+                return;
+            }
 
-        System.out.println("(TODO) Would list overdue loans as of " + today);
+            System.out.println("Overdue as of " + today + ":");
+            loans.forEach(System.out::println);
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error retrieving overdue loans: " + ex.getMessage());
+        }
     }
 }

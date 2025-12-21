@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Change these if you want -->
+    <property name="LOG_DIR" value="logs"/>
+    <property name="APP_NAME" value="library-app"/>
+
+    <!-- Console log pattern -->
+    <property name="CONSOLE_PATTERN"
+              value="%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+
+    <!-- File log pattern -->
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+
+    <!-- Console Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Rolling File Appender -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- Current log file -->
+        <file>${LOG_DIR}/${APP_NAME}.log</file>
+
+        <!-- Roll by time + size -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- Archive pattern -->
+            <fileNamePattern>${LOG_DIR}/archive/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+
+            <!-- Max size per file before creating next index -->
+            <maxFileSize>10MB</maxFileSize>
+
+            <!-- Keep N days -->
+            <maxHistory>14</maxHistory>
+
+            <!-- Cap total archived logs -->
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Optional: Reduce noise from libraries -->
+    <logger name="org.postgresql" level="INFO"/>
+    <logger name="ch.qos.logback" level="WARN"/>
+
+    <!-- Your app packages (adjust if yours differ) -->
+    <logger name="controller" level="DEBUG"/>
+    <logger name="service" level="DEBUG"/>
+    <logger name="repository" level="DEBUG"/>
+    <logger name="util" level="INFO"/>
+
+    <!-- Root Logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+</configuration>

@@ -1,16 +1,24 @@
 package controller;
 
+import service.MemberService;
+import service.models.Member;
 import util.InputUtil;
 
-// TODO (later): import service.MemberService;
-// TODO (later): import service.Member;
+import java.util.List;
+import java.util.Optional;
 
 public class MemberController {
 
-    // TODO (later): private final MemberService memberService;
+    private final MemberService memberService;
 
     public MemberController() {
-        // TODO (later): this.memberService = new MemberService();
+        this.memberService = new MemberService();
+    }
+
+    // Optional: for unit tests (inject a mocked service)
+    public MemberController(MemberService memberService) {
+        if (memberService == null) throw new IllegalArgumentException("memberService cannot be null.");
+        this.memberService = memberService;
     }
 
     public void handleInput() {
@@ -47,79 +55,136 @@ public class MemberController {
         System.out.println();
         System.out.println("=== ALL MEMBERS ===");
 
-        // TODO (later):
-        // memberService.findAll().forEach(System.out::println);
+        try {
+            List<Member> members = memberService.getAll();
+            if (members.isEmpty()) {
+                System.out.println("No members found.");
+                return;
+            }
 
-        System.out.println("(TODO) Service layer not implemented yet.");
+            members.forEach(System.out::println);
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error retrieving members: " + ex.getMessage());
+        }
     }
 
     private void addMember() {
         System.out.println();
         System.out.println("=== ADD MEMBER ===");
 
-        String name = InputUtil.readString("Name: ");
+        try {
+            String name = InputUtil.readString("Name: ");
 
-        String email = InputUtil.readString("Email (blank for none): ");
-        if (email != null && email.isBlank()) email = null;
+            // NOTE: InputUtil.readString() does NOT allow blank input.
+            // Use sentinel values for optional fields.
+            String emailInput = InputUtil.readString("Email (type NONE if not applicable): ");
+            String phoneInput = InputUtil.readString("Phone (type NONE if not applicable): ");
 
-        String phone = InputUtil.readString("Phone (blank for none): ");
-        if (phone != null && phone.isBlank()) phone = null;
+            String email = parseOptionalString(emailInput);
+            String phone = parseOptionalString(phoneInput);
 
-        // TODO (later):
-        // Member member = new Member(name, email, phone);
-        // Member saved = memberService.create(member);
-        // System.out.println("Saved: " + saved);
+            Member member = new Member(name, email, phone);
+            Long id = memberService.create(member);
 
-        System.out.println("(TODO) Would create member: " + name);
+            System.out.println("Saved member with id=" + id);
+
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Could not add member: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            System.out.println("Error adding member: " + ex.getMessage());
+        }
     }
 
     private void findMemberById() {
         System.out.println();
         System.out.println("=== FIND MEMBER ===");
 
-        int id = InputUtil.readInt("Member ID: ");
+        long id = InputUtil.readInt("Member ID: ");
 
-        // TODO (later):
-        // memberService.findById(id)
-        //     .ifPresentOrElse(
-        //         System.out::println,
-        //         () -> System.out.println("No member found with id=" + id)
-        //     );
+        try {
+            Optional<Member> maybeMember = memberService.getById(id);
+            if (maybeMember.isEmpty()) {
+                System.out.println("No member found with id=" + id);
+                return;
+            }
 
-        System.out.println("(TODO) Would look up member with id=" + id);
+            System.out.println(maybeMember.get());
+
+        } catch (RuntimeException ex) {
+            System.out.println("Error finding member: " + ex.getMessage());
+        }
     }
 
     private void updateMember() {
         System.out.println();
         System.out.println("=== UPDATE MEMBER ===");
 
-        int id = InputUtil.readInt("Member ID to update: ");
+        long id = InputUtil.readInt("Member ID to update: ");
 
-        String newName = InputUtil.readString("New name (blank to keep): ");
-        String newEmail = InputUtil.readString("New email (blank to keep, type NULL to clear): ");
-        String newPhone = InputUtil.readString("New phone (blank to keep, type NULL to clear): ");
+        try {
+            Optional<Member> maybeExisting = memberService.getById(id);
+            if (maybeExisting.isEmpty()) {
+                System.out.println("No member found with id=" + id);
+                return;
+            }
 
-        // TODO (later):
-        // var maybeMember = memberService.findById(id);
-        // if (maybeMember.isEmpty()) { ... }
-        // Member member = maybeMember.get();
-        // if (!newName.isBlank()) member.setName(newName);
-        // if (!newEmail.isBlank()) { if ("NULL".equalsIgnoreCase(newEmail)) member.setEmail(null); else member.setEmail(newEmail); }
-        // if (!newPhone.isBlank()) { if ("NULL".equalsIgnoreCase(newPhone)) member.setPhone(null); else member.setPhone(newPhone); }
-        // memberService.update(member);
+            Member existing = maybeExisting.get();
+            System.out.println("Current: " + existing);
+            System.out.println();
+            System.out.println("Update rules:");
+            System.out.println("- For name: enter '-' to keep current.");
+            System.out.println("- For email/phone: enter '-' to keep current, or 'NONE' to clear.");
 
-        System.out.println("(TODO) Would update member id=" + id);
+            String nameInput = InputUtil.readString("New name: ");
+            String emailInput = InputUtil.readString("New email: ");
+            String phoneInput = InputUtil.readString("New phone: ");
+
+            Member updated = new Member();
+            updated.setName("-".equals(nameInput) ? existing.getName() : nameInput);
+
+            if ("-".equals(emailInput)) updated.setEmail(existing.getEmail());
+            else updated.setEmail(parseOptionalString(emailInput)); // "NONE" -> null
+
+            if ("-".equals(phoneInput)) updated.setPhone(existing.getPhone());
+            else updated.setPhone(parseOptionalString(phoneInput)); // "NONE" -> null
+
+            Member result = memberService.update(id, updated);
+            System.out.println("Updated: " + result);
+
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Could not update member: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            System.out.println("Error updating member: " + ex.getMessage());
+        }
     }
 
     private void deleteMember() {
         System.out.println();
         System.out.println("=== DELETE MEMBER ===");
 
-        int id = InputUtil.readInt("Member ID to delete: ");
+        long id = InputUtil.readInt("Member ID to delete: ");
 
-        // TODO (later):
-        // memberService.deleteById(id);
+        try {
+            boolean deleted = memberService.delete(id);
+            if (deleted) {
+                System.out.println("Deleted member id=" + id);
+            } else {
+                System.out.println("No member found with id=" + id + " (nothing deleted).");
+            }
+        } catch (RuntimeException ex) {
+            System.out.println("Error deleting member: " + ex.getMessage());
+        }
+    }
 
-        System.out.println("(TODO) Would delete member id=" + id);
+    /**
+     * Converts sentinel strings into a nullable value.
+     * Because InputUtil.readString() disallows blank, we use "NONE" to mean null.
+     */
+    private static String parseOptionalString(String input) {
+        if (input == null) return null;
+        String trimmed = input.trim();
+        if (trimmed.equalsIgnoreCase("NONE")) return null;
+        return trimmed;
     }
 }
