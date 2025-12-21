@@ -18,10 +18,32 @@ public class DebugMain {
     public static void main(String[] args) {
         System.out.println("Program started!");
 
-        String input = "";
+        String input;
 
-        while(!input.equals("Y") || !input.equals("N")) {
-            input = InputUtil.readString("Do you want to run the Debugger tests? Y/N ");
+        while (true) {
+            input = InputUtil.readString(
+                    "Do you want to run the debugger tests? (Y = Yes, N = No): "
+            ).trim().toUpperCase();
+
+            if (input.equals("Y") || input.equals("N")) {
+                break;
+            }
+
+            System.out.println("Invalid input. Please enter Y or N.");
+        }
+
+        if (input.equals("Y")) {
+            while (true) {
+                input = InputUtil.readString(
+                        "Are you sure? This will RESET ALL database data. (Y = Yes, N = No): "
+                ).trim().toUpperCase();
+
+                if (input.equals("Y") || input.equals("N")) {
+                    break;
+                }
+
+                System.out.println("Invalid input. Please enter Y or N.");
+            }
         }
 
         boolean debug = input.equals("Y");

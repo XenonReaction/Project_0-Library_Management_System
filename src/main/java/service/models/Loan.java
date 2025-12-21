@@ -1,4 +1,4 @@
-package model;
+package service.models;
 
 import java.time.LocalDate;
 
@@ -8,9 +8,9 @@ import java.time.LocalDate;
  */
 public class Loan {
 
-    private int id;
-    private int bookId;
-    private int memberId;
+    private long id;
+    private long bookId;
+    private long memberId;
     private LocalDate checkoutDate;
     private LocalDate dueDate;
     private LocalDate returnDate; // nullable
@@ -19,7 +19,7 @@ public class Loan {
     public Loan() {}
 
     // Full constructor
-    public Loan(int id, int bookId, int memberId,
+    public Loan(long id, long bookId, long memberId,
                 LocalDate checkoutDate, LocalDate dueDate, LocalDate returnDate) {
         this.id = id;
         this.bookId = bookId;
@@ -30,7 +30,7 @@ public class Loan {
     }
 
     // Constructor before saving (ID auto-generated)
-    public Loan(int bookId, int memberId,
+    public Loan(long bookId, long memberId,
                 LocalDate checkoutDate, LocalDate dueDate, LocalDate returnDate) {
         this.bookId = bookId;
         this.memberId = memberId;
@@ -40,14 +40,14 @@ public class Loan {
     }
 
     // Getters & setters
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
+    public long getId() { return id; }
+    public void setId(long id) { this.id = id; }
 
-    public int getBookId() { return bookId; }
-    public void setBookId(int bookId) { this.bookId = bookId; }
+    public long getBookId() { return bookId; }
+    public void setBookId(long bookId) { this.bookId = bookId; }
 
-    public int getMemberId() { return memberId; }
-    public void setMemberId(int memberId) { this.memberId = memberId; }
+    public long getMemberId() { return memberId; }
+    public void setMemberId(long memberId) { this.memberId = memberId; }
 
     public LocalDate getCheckoutDate() { return checkoutDate; }
     public void setCheckoutDate(LocalDate checkoutDate) { this.checkoutDate = checkoutDate; }

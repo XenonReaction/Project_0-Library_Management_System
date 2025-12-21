@@ -1,11 +1,11 @@
-package model;
+package service.models;
 
 /**
- * Represents a library member who can check out books.
+ * Represents a library member.
  */
 public class Member {
 
-    private int id;
+    private long id;
     private String name;
     private String email;  // optional but may be UNIQUE
     private String phone;  // optional
@@ -14,7 +14,7 @@ public class Member {
     public Member() {}
 
     // Full constructor
-    public Member(int id, String name, String email, String phone) {
+    public Member(long id, String name, String email, String phone) {
         this.id = id;
         this.name = name;
         this.email = email;
@@ -29,8 +29,8 @@ public class Member {
     }
 
     // Getters & setters
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
+    public long getId() { return id; }
+    public void setId(long id) { this.id = id; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

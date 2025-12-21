@@ -44,6 +44,8 @@ public class BookDAO implements BaseDAO<BookEntity> {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     book.setId(rs.getLong("id"));
+                } else {
+                    throw new RuntimeException("Failed to save book: no id returned.");
                 }
             }
 
@@ -55,7 +57,7 @@ public class BookDAO implements BaseDAO<BookEntity> {
     }
 
     @Override
-    public Optional<BookEntity> findById(int id) {
+    public Optional<BookEntity> findById(long id) {
         final String sql =
                 "SELECT id, title, author, isbn, publication_year " +
                         "FROM books WHERE id = ?;";
@@ -124,21 +126,32 @@ public class BookDAO implements BaseDAO<BookEntity> {
 
             ps.setLong(5, book.getId());
 
-            ps.executeUpdate();
+            int rows = ps.executeUpdate();
+            if (rows != 1) {
+                throw new RuntimeException(
+                        "Failed to update book id=" + book.getId() + " (rows=" + rows + ")"
+                );
+            }
 
         } catch (SQLException e) {
-            throw new RuntimeException("Failed to update book", e);
+            throw new RuntimeException("Failed to update book id=" + book.getId(), e);
         }
     }
 
     @Override
-    public void deleteById(int id) {
+    public void deleteById(long id) {
         final String sql = "DELETE FROM books WHERE id = ?;";
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
-            ps.executeUpdate();
+
+            int rows = ps.executeUpdate();
+            if (rows != 1) {
+                throw new RuntimeException(
+                        "Failed to delete book id=" + id + " (rows=" + rows + ")"
+                );
+            }
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to delete book id=" + id, e);

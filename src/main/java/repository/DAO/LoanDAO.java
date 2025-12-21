@@ -53,7 +53,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     @Override
-    public Optional<LoanEntity> findById(int id) {
+    public Optional<LoanEntity> findById(long id) {
         final String sql = """
             SELECT id, book_id, member_id, checkout_date, due_date, return_date
             FROM loans
@@ -62,12 +62,10 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
-            ps.setInt(1, id);
+            ps.setLong(1, id);
 
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return Optional.empty();
-                }
+                if (!rs.next()) return Optional.empty();
                 return Optional.of(mapRow(rs));
             }
 
@@ -125,7 +123,9 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
-                throw new RuntimeException("Failed to update loan id=" + loan.getId() + " (rows=" + rows + ")");
+                throw new RuntimeException(
+                        "Failed to update loan id=" + loan.getId() + " (rows=" + rows + ")"
+                );
             }
 
         } catch (SQLException e) {
@@ -134,7 +134,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     @Override
-    public void deleteById(int id) {
+    public void deleteById(long id) {
         final String sql = """
             DELETE FROM loans
             WHERE id = ?
@@ -142,11 +142,13 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
-            ps.setInt(1, id);
+            ps.setLong(1, id);
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
-                throw new RuntimeException("Failed to delete loan id=" + id + " (rows=" + rows + ")");
+                throw new RuntimeException(
+                        "Failed to delete loan id=" + id + " (rows=" + rows + ")"
+                );
             }
 
         } catch (SQLException e) {
@@ -158,7 +160,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
        Additional Loan-specific queries
        ========================================================= */
 
-    public List<LoanEntity> findByMemberId(int memberId) {
+    public List<LoanEntity> findByMemberId(long memberId) {
         final String sql = """
             SELECT id, book_id, member_id, checkout_date, due_date, return_date
             FROM loans
@@ -170,7 +172,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
-            ps.setInt(1, memberId);
+            ps.setLong(1, memberId);
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {

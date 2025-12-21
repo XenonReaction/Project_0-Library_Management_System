@@ -5,7 +5,8 @@ import java.util.Optional;
 
 /**
  * A generic DAO interface that defines common CRUD operations.
- * @param <T>  The type of model object this DAO manages.
+ *
+ * @param <T> The type of model object this DAO manages.
  */
 public interface BaseDAO<T> {
 
@@ -23,7 +24,7 @@ public interface BaseDAO<T> {
      * @param id the ID to search for
      * @return an Optional containing the found object, or empty if not found
      */
-    Optional<T> findById(int id);
+    Optional<T> findById(long id);
 
     /**
      * Retrieves all objects of this type.
@@ -44,5 +45,5 @@ public interface BaseDAO<T> {
      *
      * @param id the ID of the object to delete
      */
-    void deleteById(int id);
+    void deleteById(long id);
 }

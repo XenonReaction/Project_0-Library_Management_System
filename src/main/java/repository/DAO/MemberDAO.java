@@ -49,7 +49,7 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
     }
 
     @Override
-    public Optional<MemberEntity> findById(int id) {
+    public Optional<MemberEntity> findById(long id) {
         final String sql = """
             SELECT id, name, email, phone
             FROM members
@@ -136,7 +136,7 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
     }
 
     @Override
-    public void deleteById(int id) {
+    public void deleteById(long id) {
         final String sql = """
             DELETE FROM members
             WHERE id = ?
