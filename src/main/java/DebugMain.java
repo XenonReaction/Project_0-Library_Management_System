@@ -1,6 +1,8 @@
 import util.DbConnectionUtil;
 import util.InputUtil;
 
+import repository.DbSetup;
+
 import repository.DAO.BookDAO;
 import repository.DAO.MemberDAO;
 import repository.DAO.LoanDAO;
@@ -25,6 +27,19 @@ public class DebugMain {
         } catch (Exception e) {
             System.out.println("DB connection failed!");
             e.printStackTrace();
+            return; // can't continue without DB
+        }
+
+        // =========================================================
+        // 1b. Drop + recreate + seed tables (AFTER confirming DB connection)
+        // =========================================================
+        try {
+            DbSetup.run();
+            System.out.println("DB tables dropped/recreated and dummy data inserted!");
+        } catch (Exception e) {
+            System.out.println("DbSetup failed!");
+            e.printStackTrace();
+            return; // stop if schema reset fails
         }
 
         // =========================================================

@@ -1,6 +1,5 @@
 package repository.DAO;
 
-import repository.DAO.BaseDAO;
 import repository.entities.MemberEntity;
 import util.DbConnectionUtil;
 
@@ -9,36 +8,36 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-
 public class MemberDAO implements BaseDAO<MemberEntity> {
+
+    // --------------------------------------------------
+    // Shared connection for this DAO
+    // --------------------------------------------------
+    private final Connection connection = DbConnectionUtil.getConnection();
 
     @Override
     public MemberEntity save(MemberEntity member) {
         final String sql = """
             INSERT INTO members (name, email, phone)
             VALUES (?, ?, ?)
+            RETURNING id
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setString(1, member.getName());
 
-            // nullable columns
             if (member.getEmail() == null) ps.setNull(2, Types.VARCHAR);
             else ps.setString(2, member.getEmail());
 
             if (member.getPhone() == null) ps.setNull(3, Types.VARCHAR);
             else ps.setString(3, member.getPhone());
 
-            int rows = ps.executeUpdate();
-            if (rows != 1) {
-                throw new RuntimeException("Failed to save member: no row inserted.");
-            }
-
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) {
-                    member.setId(keys.getLong(1));
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    member.setId(rs.getLong("id"));
+                } else {
+                    throw new RuntimeException("Failed to save member: no id returned.");
                 }
             }
 
@@ -57,22 +56,19 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
             WHERE id = ?
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return Optional.empty();
 
-                MemberEntity member = new MemberEntity(
+                return Optional.of(new MemberEntity(
                         rs.getLong("id"),
                         rs.getString("name"),
-                        rs.getString("email"), // may be null
-                        rs.getString("phone")  // may be null
-                );
-
-                return Optional.of(member);
+                        rs.getString("email"),
+                        rs.getString("phone")
+                ));
             }
 
         } catch (SQLException e) {
@@ -90,8 +86,7 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
 
         List<MemberEntity> results = new ArrayList<>();
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
+        try (PreparedStatement ps = connection.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
@@ -118,8 +113,7 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
             WHERE id = ?
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setString(1, member.getName());
 
@@ -148,8 +142,7 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
             WHERE id = ?
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
 

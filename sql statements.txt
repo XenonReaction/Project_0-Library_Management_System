@@ -1,7 +1,12 @@
+DROP TABLE loans;
+DROP TABLE members;
+DROP TABLE books;
+
 -- 1) BOOKS
 -- Each row represents ONE physical copy (so multiple copies = multiple rows)
 CREATE TABLE IF NOT EXISTS books (
     id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    
     title            VARCHAR(255) NOT NULL,
     author           VARCHAR(255) NOT NULL,
     isbn             VARCHAR(20),

@@ -9,19 +9,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-
 public class LoanDAO implements BaseDAO<LoanEntity> {
+
+    // --------------------------------------------------
+    // Shared connection for this DAO
+    // --------------------------------------------------
+    private final Connection connection = DbConnectionUtil.getConnection();
 
     @Override
     public LoanEntity save(LoanEntity loan) {
         final String sql = """
             INSERT INTO loans (book_id, member_id, checkout_date, due_date, return_date)
             VALUES (?, ?, ?, ?, ?)
+            RETURNING id
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps =
-                     conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, loan.getBookId());
             ps.setLong(2, loan.getMemberId());
@@ -34,11 +37,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 ps.setDate(5, Date.valueOf(loan.getReturnDate()));
             }
 
-            ps.executeUpdate();
-
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) {
-                    loan.setId(keys.getLong(1));
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    loan.setId(rs.getLong("id"));
+                } else {
+                    throw new RuntimeException("Failed to save loan: no id returned.");
                 }
             }
 
@@ -57,8 +60,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             WHERE id = ?
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setInt(1, id);
 
@@ -84,8 +86,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
         List<LoanEntity> loans = new ArrayList<>();
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
+        try (PreparedStatement ps = connection.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
@@ -107,8 +108,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             WHERE id = ?
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, loan.getBookId());
             ps.setLong(2, loan.getMemberId());
@@ -121,9 +121,12 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 ps.setDate(5, Date.valueOf(loan.getReturnDate()));
             }
 
-            ps.setInt(6, (int) loan.getId());
+            ps.setLong(6, loan.getId());
 
-            ps.executeUpdate();
+            int rows = ps.executeUpdate();
+            if (rows != 1) {
+                throw new RuntimeException("Failed to update loan id=" + loan.getId() + " (rows=" + rows + ")");
+            }
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to update loan id=" + loan.getId(), e);
@@ -137,11 +140,14 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             WHERE id = ?
             """;
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setInt(1, id);
-            ps.executeUpdate();
+
+            int rows = ps.executeUpdate();
+            if (rows != 1) {
+                throw new RuntimeException("Failed to delete loan id=" + id + " (rows=" + rows + ")");
+            }
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to delete loan id=" + id, e);
@@ -162,8 +168,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
         List<LoanEntity> loans = new ArrayList<>();
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setInt(1, memberId);
 
@@ -190,8 +195,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
         List<LoanEntity> loans = new ArrayList<>();
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
+        try (PreparedStatement ps = connection.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
@@ -216,8 +220,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
         List<LoanEntity> loans = new ArrayList<>();
 
-        try (Connection conn = DbConnectionUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setDate(1, Date.valueOf(currentDate));
 

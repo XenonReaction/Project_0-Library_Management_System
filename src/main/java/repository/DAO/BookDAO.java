@@ -1,7 +1,6 @@
 package repository.DAO;
 
 import repository.entities.BookEntity;
-import repository.DAO.BaseDAO;
 import util.DbConnectionUtil;
 
 import java.sql.*;
@@ -14,23 +13,33 @@ import java.util.Optional;
  */
 public class BookDAO implements BaseDAO<BookEntity> {
 
+    // --------------------------------------------------
+    // Shared connection for this DAO
+    // --------------------------------------------------
+    private final Connection connection = DbConnectionUtil.getConnection();
+
     @Override
     public BookEntity save(BookEntity book) {
         final String sql =
                 "INSERT INTO books (title, author, isbn, publication_year) " +
                         "VALUES (?, ?, ?, ?) RETURNING id;";
 
-        try (PreparedStatement ps =
-                     DbConnectionUtil.getConnection().prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setString(1, book.getTitle());
             ps.setString(2, book.getAuthor());
 
-            if (book.getIsbn() == null) ps.setNull(3, Types.VARCHAR);
-            else ps.setString(3, book.getIsbn());
+            if (book.getIsbn() == null) {
+                ps.setNull(3, Types.VARCHAR);
+            } else {
+                ps.setString(3, book.getIsbn());
+            }
 
-            if (book.getPublicationYear() == null) ps.setNull(4, Types.INTEGER);
-            else ps.setInt(4, book.getPublicationYear());
+            if (book.getPublicationYear() == null) {
+                ps.setNull(4, Types.INTEGER);
+            } else {
+                ps.setInt(4, book.getPublicationYear());
+            }
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -51,13 +60,14 @@ public class BookDAO implements BaseDAO<BookEntity> {
                 "SELECT id, title, author, isbn, publication_year " +
                         "FROM books WHERE id = ?;";
 
-        try (PreparedStatement ps =
-                     DbConnectionUtil.getConnection().prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
 
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
                 return Optional.of(mapRow(rs));
             }
 
@@ -74,8 +84,7 @@ public class BookDAO implements BaseDAO<BookEntity> {
 
         List<BookEntity> books = new ArrayList<>();
 
-        try (PreparedStatement ps =
-                     DbConnectionUtil.getConnection().prepareStatement(sql);
+        try (PreparedStatement ps = connection.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
@@ -96,17 +105,22 @@ public class BookDAO implements BaseDAO<BookEntity> {
                         "SET title = ?, author = ?, isbn = ?, publication_year = ? " +
                         "WHERE id = ?;";
 
-        try (PreparedStatement ps =
-                     DbConnectionUtil.getConnection().prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setString(1, book.getTitle());
             ps.setString(2, book.getAuthor());
 
-            if (book.getIsbn() == null) ps.setNull(3, Types.VARCHAR);
-            else ps.setString(3, book.getIsbn());
+            if (book.getIsbn() == null) {
+                ps.setNull(3, Types.VARCHAR);
+            } else {
+                ps.setString(3, book.getIsbn());
+            }
 
-            if (book.getPublicationYear() == null) ps.setNull(4, Types.INTEGER);
-            else ps.setInt(4, book.getPublicationYear());
+            if (book.getPublicationYear() == null) {
+                ps.setNull(4, Types.INTEGER);
+            } else {
+                ps.setInt(4, book.getPublicationYear());
+            }
 
             ps.setLong(5, book.getId());
 
@@ -121,8 +135,7 @@ public class BookDAO implements BaseDAO<BookEntity> {
     public void deleteById(int id) {
         final String sql = "DELETE FROM books WHERE id = ?;";
 
-        try (PreparedStatement ps =
-                     DbConnectionUtil.getConnection().prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
             ps.executeUpdate();
@@ -131,6 +144,10 @@ public class BookDAO implements BaseDAO<BookEntity> {
             throw new RuntimeException("Failed to delete book id=" + id, e);
         }
     }
+
+    // --------------------------------------------------
+    // Row mapper
+    // --------------------------------------------------
 
     private BookEntity mapRow(ResultSet rs) throws SQLException {
         return new BookEntity(
