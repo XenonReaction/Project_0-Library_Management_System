@@ -1,0 +1,252 @@
+-- 1) BOOKS
+-- Each row represents ONE physical copy (so multiple copies = multiple rows)
+CREATE TABLE IF NOT EXISTS books (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    title            VARCHAR(255) NOT NULL,
+    author           VARCHAR(255) NOT NULL,
+    isbn             VARCHAR(20),
+    publication_year INTEGER,
+
+    CONSTRAINT books_isbn_format_chk
+        CHECK (isbn IS NULL OR isbn ~ '^[0-9Xx-]{10,20}$'),
+
+    CONSTRAINT books_publication_year_chk
+        CHECK (publication_year IS NULL OR (publication_year BETWEEN 1400 AND 3000))
+);
+
+-- Optional: help lookup by title/author
+CREATE INDEX IF NOT EXISTS idx_books_title_author
+    ON books (title, author);
+
+
+-- 2) MEMBERS
+CREATE TABLE IF NOT EXISTS members (
+    id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name   VARCHAR(255) NOT NULL,
+    email  VARCHAR(320),
+    phone  VARCHAR(30),
+
+    CONSTRAINT members_email_unique UNIQUE (email),
+
+    CONSTRAINT members_email_format_chk
+        CHECK (email IS NULL OR email ~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$')
+);
+
+-- Optional: help lookup by name
+CREATE INDEX IF NOT EXISTS idx_members_name
+    ON members (name);
+
+
+-- 3) LOANS (junction table)
+CREATE TABLE IF NOT EXISTS loans (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    book_id        BIGINT NOT NULL,
+    member_id      BIGINT NOT NULL,
+    checkout_date  DATE NOT NULL DEFAULT CURRENT_DATE,
+    due_date       DATE NOT NULL,
+    return_date    DATE,
+
+    CONSTRAINT loans_book_fk
+        FOREIGN KEY (book_id)
+        REFERENCES books (id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+
+    CONSTRAINT loans_member_fk
+        FOREIGN KEY (member_id)
+        REFERENCES members (id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+
+    CONSTRAINT loans_due_after_checkout_chk
+        CHECK (due_date >= checkout_date),
+
+    CONSTRAINT loans_return_after_checkout_chk
+        CHECK (return_date IS NULL OR return_date >= checkout_date)
+);
+
+-- Enforce: a given physical book copy can only be checked out once at a time
+-- (i.e., only one active loan where return_date IS NULL)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_loans_one_active_loan_per_book
+    ON loans (book_id)
+    WHERE return_date IS NULL;
+
+-- Helpful indexes for common queries (member history, active/overdue lists)
+CREATE INDEX IF NOT EXISTS idx_loans_member_id
+    ON loans (member_id);
+
+CREATE INDEX IF NOT EXISTS idx_loans_active
+    ON loans (return_date)
+    WHERE return_date IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_loans_due_date_active
+    ON loans (due_date)
+    WHERE return_date IS NULL;
+
+
+
+
+
+-- =========================
+-- INSERT BOOKS
+-- =========================
+INSERT INTO books (title, author, isbn, publication_year)
+VALUES
+  ('Clean Code', 'Robert C. Martin', '978-0132350884', 2008),
+  ('Clean Code', 'Robert C. Martin', '978-0132350884', 2008),
+  ('Effective Java', 'Joshua Bloch', '978-0134685991', 2018),
+  ('Design Patterns', 'Erich Gamma et al.', '978-0201633610', 1994),
+  ('Introduction to Algorithms', 'Cormen et al.', '978-0262033848', 2009);
+
+-- =========================
+-- INSERT MEMBERS
+-- =========================
+INSERT INTO members (name, email, phone)
+VALUES
+  ('Alice Johnson', 'alice.johnson@example.com', '555-111-2222'),
+  ('Bob Smith', 'bob.smith@example.com', '555-333-4444'),
+  ('Charlie Nguyen', 'charlie.nguyen@example.com', '555-555-6666');
+
+-- =========================
+-- INSERT LOANS
+-- =========================
+
+-- Active loans
+INSERT INTO loans (book_id, member_id, checkout_date, due_date)
+VALUES
+  (1, 1, CURRENT_DATE, CURRENT_DATE + INTERVAL '14 days'),
+  (3, 2, CURRENT_DATE - INTERVAL '2 days', CURRENT_DATE + INTERVAL '12 days');
+
+-- Returned loan (historical record)
+INSERT INTO loans (book_id, member_id, checkout_date, due_date, return_date)
+VALUES
+  (4, 3,
+   CURRENT_DATE - INTERVAL '20 days',
+   CURRENT_DATE - INTERVAL '6 days',
+   CURRENT_DATE - INTERVAL '5 days');
+
+
+-- =====================================
+-- BASIC TABLE CHECKS
+-- =====================================
+
+-- View all books
+SELECT * FROM books
+ORDER BY id;
+
+-- View all members
+SELECT * FROM members
+ORDER BY id;
+
+-- View all loans (including returned)
+SELECT * FROM loans
+ORDER BY checkout_date DESC;
+
+
+-- =====================================
+-- JOIN QUERIES (CORE FUNCTIONALITY)
+-- =====================================
+
+-- 1) All active loans with book + member info
+SELECT
+    l.id            AS loan_id,
+    b.id            AS book_id,
+    b.title         AS book_title,
+    b.author        AS book_author,
+    m.id            AS member_id,
+    m.name          AS member_name,
+    l.checkout_date,
+    l.due_date
+FROM loans l
+JOIN books b   ON l.book_id = b.id
+JOIN members m ON l.member_id = m.id
+WHERE l.return_date IS NULL
+ORDER BY l.due_date;
+
+
+-- 2) Loan history for each member
+SELECT
+    m.name          AS member,
+    b.title         AS book,
+    l.checkout_date,
+    l.due_date,
+    l.return_date
+FROM loans l
+JOIN members m ON l.member_id = m.id
+JOIN books b   ON l.book_id = b.id
+ORDER BY m.name, l.checkout_date DESC;
+
+
+-- 3) Currently available books (no active loan)
+SELECT
+    b.id,
+    b.title,
+    b.author
+FROM books b
+LEFT JOIN loans l
+       ON b.id = l.book_id
+      AND l.return_date IS NULL
+WHERE l.id IS NULL
+ORDER BY b.title;
+
+
+-- 4) Overdue loans
+SELECT
+    m.name          AS member,
+    b.title         AS book,
+    l.checkout_date,
+    l.due_date
+FROM loans l
+JOIN members m ON l.member_id = m.id
+JOIN books b   ON l.book_id = b.id
+WHERE l.return_date IS NULL
+  AND l.due_date < CURRENT_DATE
+ORDER BY l.due_date;
+
+
+-- =====================================
+-- AGGREGATION / REPORTING QUERIES
+-- =====================================
+
+-- 5) Number of books currently checked out per member
+SELECT
+    m.name,
+    COUNT(l.id) AS books_checked_out
+FROM members m
+LEFT JOIN loans l
+       ON m.id = l.member_id
+      AND l.return_date IS NULL
+GROUP BY m.name
+ORDER BY books_checked_out DESC;
+
+
+-- 6) Total loan count per book title
+SELECT
+    b.title,
+    COUNT(l.id) AS total_loans
+FROM books b
+LEFT JOIN loans l ON b.id = l.book_id
+GROUP BY b.title
+ORDER BY total_loans DESC;
+
+
+-- =====================================
+-- DATA INTEGRITY / SANITY CHECKS
+-- =====================================
+
+-- 7) Ensure no book has more than one active loan
+SELECT
+    b.id,
+    b.title,
+    COUNT(l.id) AS active_loans
+FROM books b
+JOIN loans l ON b.id = l.book_id
+WHERE l.return_date IS NULL
+GROUP BY b.id, b.title
+HAVING COUNT(l.id) > 1;
+
+DELETE
+FROM members
+WHERE members.email = 'test.member@example.com';
+
+SELECT * FROM members;

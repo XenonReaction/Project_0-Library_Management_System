@@ -64,7 +64,7 @@ public class DebugMain {
         // =========================================================
         MemberEntity member = new MemberEntity(
                 "Test Member",
-                "test.member@example.com",
+                "test.member1@example.com",
                 "555-123-4567"
         );
 
