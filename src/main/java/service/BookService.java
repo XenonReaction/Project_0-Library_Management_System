@@ -1,5 +1,7 @@
 package service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import repository.DAO.BookDAO;
 import repository.entities.BookEntity;
 import service.interfaces.ServiceInterface;
@@ -15,22 +17,31 @@ import java.util.Optional;
  */
 public class BookService implements ServiceInterface<Book, Long> {
 
+    private static final Logger log = LoggerFactory.getLogger(BookService.class);
+
     private final BookDAO bookDAO;
 
     public BookService() {
         this.bookDAO = new BookDAO();
+        log.debug("BookService initialized with default BookDAO.");
     }
 
     /**
      * Constructor for testing (lets you inject a mock BookDAO later).
      */
     public BookService(BookDAO bookDAO) {
-        if (bookDAO == null) throw new IllegalArgumentException("bookDAO cannot be null.");
+        if (bookDAO == null) {
+            log.error("Attempted to initialize BookService with null BookDAO.");
+            throw new IllegalArgumentException("bookDAO cannot be null.");
+        }
         this.bookDAO = bookDAO;
+        log.debug("BookService initialized with injected BookDAO.");
     }
 
     @Override
     public Long create(Book model) {
+        log.debug("create(Book) called.");
+
         ValidationUtil.requireNonNull(model, "book");
         ValidationUtil.requireNonBlank(model.getTitle(), "title");
         ValidationUtil.requireNonBlank(model.getAuthor(), "author");
@@ -40,31 +51,46 @@ public class BookService implements ServiceInterface<Book, Long> {
         BookEntity entity = toEntityForInsert(model);
         BookEntity saved = bookDAO.save(entity);
 
-        // Optional: reflect generated ID back onto the model if your model still uses int IDs.
-        // If your Book model uses long, replace this with model.setId(saved.getId()).
         setModelIdIfFitsInt(model, saved.getId());
 
+        log.info("Book created successfully with id={}", saved.getId());
         return saved.getId();
     }
 
     @Override
     public Optional<Book> getById(Long id) {
-        if (id == null || id <= 0) return Optional.empty();
+        if (id == null || id <= 0) {
+            log.warn("getById called with invalid id={}", id);
+            return Optional.empty();
+        }
 
-        return bookDAO.findById(id).map(this::toModel);
+        Optional<Book> result = bookDAO.findById(id).map(this::toModel);
+        if (result.isEmpty()) {
+            log.info("No book found with id={}", id);
+        } else {
+            log.debug("Book found with id={}", id);
+        }
+        return result;
     }
 
     @Override
     public List<Book> getAll() {
-        return bookDAO.findAll()
+        log.debug("getAll called.");
+        List<Book> books = bookDAO.findAll()
                 .stream()
                 .map(this::toModel)
                 .toList();
+
+        log.debug("getAll returning {} books.", books.size());
+        return books;
     }
 
     @Override
     public Book update(Long id, Book updatedModel) {
+        log.debug("update called for id={}", id);
+
         if (id == null || id <= 0) {
+            log.warn("update called with invalid id={}", id);
             throw new IllegalArgumentException("id must be a positive number.");
         }
 
@@ -75,9 +101,11 @@ public class BookService implements ServiceInterface<Book, Long> {
         ValidationUtil.validateOptionalPublicationYear(updatedModel.getPublicationYear());
 
         BookEntity existing = bookDAO.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("No book found with id=" + id));
+                .orElseThrow(() -> {
+                    log.info("update failed: no book found with id={}", id);
+                    return new IllegalArgumentException("No book found with id=" + id);
+                });
 
-        // Apply updates
         existing.setTitle(updatedModel.getTitle());
         existing.setAuthor(updatedModel.getAuthor());
         existing.setIsbn(updatedModel.getIsbn());
@@ -86,21 +114,28 @@ public class BookService implements ServiceInterface<Book, Long> {
         bookDAO.update(existing);
 
         Book result = toModel(existing);
-
-        // Optional: keep model id consistent if model uses int IDs
         setModelIdIfFitsInt(result, existing.getId());
 
+        log.info("Book updated successfully for id={}", id);
         return result;
     }
 
     @Override
     public boolean delete(Long id) {
-        if (id == null || id <= 0) return false;
+        log.debug("delete called for id={}", id);
 
-        // Optional existence check so delete() can return false if not found
-        if (bookDAO.findById(id).isEmpty()) return false;
+        if (id == null || id <= 0) {
+            log.warn("delete called with invalid id={}", id);
+            return false;
+        }
+
+        if (bookDAO.findById(id).isEmpty()) {
+            log.info("delete skipped: no book found with id={}", id);
+            return false;
+        }
 
         bookDAO.deleteById(id);
+        log.info("Book deleted successfully for id={}", id);
         return true;
     }
 
@@ -109,7 +144,6 @@ public class BookService implements ServiceInterface<Book, Long> {
     // -------------------------
 
     private Book toModel(BookEntity entity) {
-        // If your Book model still uses int IDs, we must guard the cast.
         int modelId = safeLongToInt(entity.getId(), "Book ID");
 
         return new Book(
@@ -131,23 +165,23 @@ public class BookService implements ServiceInterface<Book, Long> {
     }
 
     // -------------------------
-    // ID helpers (since ValidationUtil no longer has long/int helpers)
+    // ID helpers
     // -------------------------
 
     private static int safeLongToInt(long value, String fieldName) {
         if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+            // This is a true invariant break (should never happen in normal use)
             throw new IllegalStateException(fieldName + " is too large to fit in int: " + value);
         }
         return (int) value;
     }
 
     private static void setModelIdIfFitsInt(Book model, long id) {
-        // Only needed while Book model uses int IDs.
-        // If Book model uses long, delete this method and just call model.setId(id).
         if (id >= Integer.MIN_VALUE && id <= Integer.MAX_VALUE) {
             model.setId((int) id);
         } else {
-            // You can either throw, ignore, or log. Throwing is safest.
+            // Invariant break: in practice, your DB IDs will not reach this for Project 0,
+            // but if they do, this is worth logging loudly.
             throw new IllegalStateException("Book ID is too large to fit in int: " + id);
         }
     }

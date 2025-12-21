@@ -1,5 +1,7 @@
 package controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import service.LoanService;
 import service.models.Loan;
 import util.InputUtil;
@@ -10,41 +12,62 @@ import java.util.Optional;
 
 public class LoanController {
 
+    private static final Logger log = LoggerFactory.getLogger(LoanController.class);
+
     private final LoanService loanService;
 
     public LoanController() {
         this.loanService = new LoanService();
+        log.debug("LoanController initialized with default LoanService.");
     }
 
     // Optional: for unit tests (inject a mocked service)
     public LoanController(LoanService loanService) {
-        if (loanService == null) throw new IllegalArgumentException("loanService cannot be null.");
+        if (loanService == null) {
+            log.error("Attempted to initialize LoanController with null LoanService.");
+            throw new IllegalArgumentException("loanService cannot be null.");
+        }
         this.loanService = loanService;
+        log.debug("LoanController initialized with injected LoanService.");
     }
 
     public void handleInput() {
+        log.info("Entered Loan Services menu.");
         boolean running = true;
 
         while (running) {
-            printMenu();
-            int choice = InputUtil.readInt("Make a choice: ");
+            try {
+                printMenu();
+                int choice = InputUtil.readInt("Make a choice: ");
+                log.debug("Loan menu selection received: {}", choice);
 
-            switch (choice) {
-                case 1 -> listAllLoans();
-                case 2 -> checkoutBook();
-                case 3 -> returnBook();
-                case 4 -> findLoanById();
-                case 5 -> deleteLoan();
-                case 6 -> listActiveLoans();
-                case 7 -> listLoansByMember();
-                case 8 -> listOverdueLoans();
-                case 0 -> running = false;
-                default -> System.out.println("Invalid option. Please try again.");
+                switch (choice) {
+                    case 1 -> listAllLoans();
+                    case 2 -> checkoutBook();
+                    case 3 -> returnBook();
+                    case 4 -> findLoanById();
+                    case 5 -> deleteLoan();
+                    case 6 -> listActiveLoans();
+                    case 7 -> listLoansByMember();
+                    case 8 -> listOverdueLoans();
+                    case 0 -> {
+                        log.info("Exiting Loan Services menu.");
+                        running = false;
+                    }
+                    default -> {
+                        log.warn("Invalid Loan menu option selected: {}", choice);
+                        System.out.println("Invalid option. Please try again.");
+                    }
+                }
+            } catch (Exception ex) {
+                log.error("Unhandled exception in LoanController menu loop.", ex);
+                System.out.println("An unexpected error occurred. Please try again.");
             }
         }
     }
 
     private void printMenu() {
+        log.debug("Printing Loan Services menu.");
         System.out.println();
         System.out.println("=== LOAN SERVICES ===");
         System.out.println("1. List all loans");
@@ -59,11 +82,14 @@ public class LoanController {
     }
 
     private void listAllLoans() {
+        log.info("Listing all loans.");
         System.out.println();
         System.out.println("=== ALL LOANS ===");
 
         try {
             List<Loan> loans = loanService.getAll();
+            log.debug("Retrieved {} loans.", loans.size());
+
             if (loans.isEmpty()) {
                 System.out.println("No loans found.");
                 return;
@@ -72,29 +98,30 @@ public class LoanController {
             loans.forEach(System.out::println);
 
         } catch (RuntimeException ex) {
-            System.out.println("Error retrieving loans: " + ex.getMessage());
+            log.error("Failed to retrieve loans.", ex);
+            System.out.println("Error retrieving loans.");
         }
     }
 
     private void checkoutBook() {
+        log.info("Checkout Book operation started.");
         System.out.println();
         System.out.println("=== CHECKOUT BOOK ===");
 
         try {
             long bookId = InputUtil.readInt("Book ID: ");
             long memberId = InputUtil.readInt("Member ID: ");
-
-            System.out.println("Loan length rules:");
-            System.out.println("- Enter 0 to use the default (14 days).");
-            System.out.println("- Enter a positive number of days.");
-
-            int daysInput = InputUtil.readInt("Loan length in days: ");
+            int daysInput = InputUtil.readInt("Loan length in days (0 for default 14): ");
             int days = (daysInput <= 0) ? 14 : daysInput;
 
             LocalDate checkoutDate = LocalDate.now();
             LocalDate dueDate = checkoutDate.plusDays(days);
 
-            // Service-layer-friendly model: create a Loan model and let the service persist it
+            log.debug(
+                    "Checkout input - bookId={}, memberId={}, checkoutDate={}, dueDate={}",
+                    bookId, memberId, checkoutDate, dueDate
+            );
+
             Loan loan = new Loan();
             loan.setBookId(bookId);
             loan.setMemberId(memberId);
@@ -104,13 +131,16 @@ public class LoanController {
 
             Long id = loanService.checkout(loan);
 
+            log.info("Checkout successful. Created loan id={}", id);
             System.out.println("Checkout successful. Created loan id=" + id);
             System.out.println("Due date: " + dueDate);
 
         } catch (IllegalArgumentException ex) {
+            log.warn("Validation error during checkout: {}", ex.getMessage());
             System.out.println("Could not checkout book: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            System.out.println("Error checking out book: " + ex.getMessage());
+            log.error("Unexpected error during checkout.", ex);
+            System.out.println("Error checking out book.");
         }
     }
 
@@ -122,17 +152,23 @@ public class LoanController {
             long loanId = InputUtil.readInt("Loan ID to return: ");
             LocalDate returnDate = LocalDate.now();
 
+            log.debug("Return requested for loanId={} on {}", loanId, returnDate);
+
             boolean returned = loanService.returnLoan(loanId, returnDate);
             if (returned) {
+                log.info("Loan returned successfully for loanId={}", loanId);
                 System.out.println("Return successful for loan id=" + loanId + " on " + returnDate);
             } else {
+                log.info("No active loan found to return for loanId={}", loanId);
                 System.out.println("No active loan found with id=" + loanId + " (nothing returned).");
             }
 
         } catch (IllegalArgumentException ex) {
+            log.warn("Validation error during return: {}", ex.getMessage());
             System.out.println("Could not return loan: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            System.out.println("Error returning book: " + ex.getMessage());
+            log.error("Unexpected error during return.", ex);
+            System.out.println("Error returning book.");
         }
     }
 
@@ -141,18 +177,22 @@ public class LoanController {
         System.out.println("=== FIND LOAN ===");
 
         long id = InputUtil.readInt("Loan ID: ");
+        log.debug("Find Loan requested for id={}", id);
 
         try {
             Optional<Loan> maybeLoan = loanService.getById(id);
             if (maybeLoan.isEmpty()) {
+                log.info("No loan found with id={}", id);
                 System.out.println("No loan found with id=" + id);
                 return;
             }
 
+            log.info("Loan found with id={}", id);
             System.out.println(maybeLoan.get());
 
         } catch (RuntimeException ex) {
-            System.out.println("Error finding loan: " + ex.getMessage());
+            log.error("Error finding loan with id={}", id, ex);
+            System.out.println("Error finding loan.");
         }
     }
 
@@ -161,25 +201,32 @@ public class LoanController {
         System.out.println("=== DELETE LOAN ===");
 
         long id = InputUtil.readInt("Loan ID to delete: ");
+        log.debug("Delete Loan requested for id={}", id);
 
         try {
             boolean deleted = loanService.delete(id);
             if (deleted) {
+                log.info("Loan deleted successfully with id={}", id);
                 System.out.println("Deleted loan id=" + id);
             } else {
+                log.info("No loan found to delete with id={}", id);
                 System.out.println("No loan found with id=" + id + " (nothing deleted).");
             }
         } catch (RuntimeException ex) {
-            System.out.println("Error deleting loan: " + ex.getMessage());
+            log.error("Error deleting loan with id={}", id, ex);
+            System.out.println("Error deleting loan.");
         }
     }
 
     private void listActiveLoans() {
+        log.info("Listing active loans.");
         System.out.println();
         System.out.println("=== ACTIVE LOANS ===");
 
         try {
             List<Loan> loans = loanService.getActiveLoans();
+            log.debug("Retrieved {} active loans.", loans.size());
+
             if (loans.isEmpty()) {
                 System.out.println("No active loans found.");
                 return;
@@ -188,7 +235,8 @@ public class LoanController {
             loans.forEach(System.out::println);
 
         } catch (RuntimeException ex) {
-            System.out.println("Error retrieving active loans: " + ex.getMessage());
+            log.error("Failed to retrieve active loans.", ex);
+            System.out.println("Error retrieving active loans.");
         }
     }
 
@@ -197,9 +245,12 @@ public class LoanController {
         System.out.println("=== LOANS BY MEMBER ===");
 
         long memberId = InputUtil.readInt("Member ID: ");
+        log.debug("Listing loans for memberId={}", memberId);
 
         try {
             List<Loan> loans = loanService.getLoansByMemberId(memberId);
+            log.debug("Retrieved {} loans for memberId={}", loans.size(), memberId);
+
             if (loans.isEmpty()) {
                 System.out.println("No loans found for memberId=" + memberId);
                 return;
@@ -208,7 +259,8 @@ public class LoanController {
             loans.forEach(System.out::println);
 
         } catch (RuntimeException ex) {
-            System.out.println("Error retrieving loans for member: " + ex.getMessage());
+            log.error("Error retrieving loans for memberId={}", memberId, ex);
+            System.out.println("Error retrieving loans for member.");
         }
     }
 
@@ -218,7 +270,10 @@ public class LoanController {
 
         try {
             LocalDate today = LocalDate.now();
+            log.debug("Listing overdue loans as of {}", today);
+
             List<Loan> loans = loanService.getOverdueLoans(today);
+            log.debug("Retrieved {} overdue loans.", loans.size());
 
             if (loans.isEmpty()) {
                 System.out.println("No overdue loans as of " + today);
@@ -229,7 +284,8 @@ public class LoanController {
             loans.forEach(System.out::println);
 
         } catch (RuntimeException ex) {
-            System.out.println("Error retrieving overdue loans: " + ex.getMessage());
+            log.error("Error retrieving overdue loans.", ex);
+            System.out.println("Error retrieving overdue loans.");
         }
     }
 }

@@ -1,5 +1,7 @@
 package repository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import util.DbConnectionUtil;
 
 import java.sql.Connection;
@@ -14,7 +16,11 @@ import java.sql.Statement;
  */
 public class DbSetup {
 
+    private static final Logger log = LoggerFactory.getLogger(DbSetup.class);
+
     public static void run() {
+        log.info("Database reset started (DROP + CREATE + SEED).");
+
         Connection conn = DbConnectionUtil.getConnection();
         boolean originalAutoCommit;
 
@@ -22,18 +28,22 @@ public class DbSetup {
             originalAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
 
+            log.debug("Auto-commit disabled. Beginning transaction.");
+
             dropTables(conn);
             createSchema(conn);
             insertDummyData(conn);
 
             conn.commit();
-            System.out.println("[DbSetup] Database cleared and reseeded successfully.");
+            log.info("Database reset completed successfully. Transaction committed.");
 
         } catch (SQLException e) {
+            log.error("Database reset failed. Attempting rollback.", e);
             try {
                 conn.rollback();
-                System.err.println("[DbSetup] ERROR — transaction rolled back.");
+                log.warn("Transaction rolled back due to error.");
             } catch (SQLException rollbackEx) {
+                log.error("Rollback failed.", rollbackEx);
                 throw new RuntimeException("Rollback failed", rollbackEx);
             }
             throw new RuntimeException("DbSetup failed", e);
@@ -41,7 +51,9 @@ public class DbSetup {
         } finally {
             try {
                 conn.setAutoCommit(true);
+                log.debug("Auto-commit restored to original state.");
             } catch (SQLException e) {
+                log.error("Failed to restore auto-commit.", e);
                 throw new RuntimeException("Failed to restore auto-commit", e);
             }
         }
@@ -52,6 +64,7 @@ public class DbSetup {
     // ----------------------------------------------------
 
     private static void dropTables(Connection conn) throws SQLException {
+        log.debug("Dropping existing tables.");
         execute(conn, "DROP TABLE IF EXISTS loans CASCADE");
         execute(conn, "DROP TABLE IF EXISTS members CASCADE");
         execute(conn, "DROP TABLE IF EXISTS books CASCADE");
@@ -62,6 +75,7 @@ public class DbSetup {
     // ----------------------------------------------------
 
     private static void createSchema(Connection conn) throws SQLException {
+        log.debug("Creating database schema.");
 
         // BOOKS
         execute(conn, """
@@ -156,8 +170,8 @@ public class DbSetup {
     // ----------------------------------------------------
 
     private static void insertDummyData(Connection conn) throws SQLException {
+        log.debug("Inserting seed data.");
 
-        // BOOKS
         execute(conn, """
             INSERT INTO books (title, author, isbn, publication_year)
             VALUES
@@ -168,7 +182,6 @@ public class DbSetup {
               ('Introduction to Algorithms', 'Cormen et al.', '978-0262033848', 2009)
             """);
 
-        // MEMBERS
         execute(conn, """
             INSERT INTO members (name, email, phone)
             VALUES
@@ -177,7 +190,6 @@ public class DbSetup {
               ('Charlie Nguyen', 'charlie.nguyen@example.com', '555-555-6666')
             """);
 
-        // ACTIVE LOANS
         execute(conn, """
             INSERT INTO loans (book_id, member_id, checkout_date, due_date)
             VALUES
@@ -185,7 +197,6 @@ public class DbSetup {
               (3, 2, CURRENT_DATE - INTERVAL '2 days', CURRENT_DATE + INTERVAL '12 days')
             """);
 
-        // RETURNED LOAN
         execute(conn, """
             INSERT INTO loans (book_id, member_id, checkout_date, due_date, return_date)
             VALUES

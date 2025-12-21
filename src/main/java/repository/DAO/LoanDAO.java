@@ -1,5 +1,7 @@
 package repository.DAO;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import repository.entities.LoanEntity;
 import util.DbConnectionUtil;
 
@@ -10,6 +12,8 @@ import java.util.List;
 import java.util.Optional;
 
 public class LoanDAO implements BaseDAO<LoanEntity> {
+
+    private static final Logger log = LoggerFactory.getLogger(LoanDAO.class);
 
     // --------------------------------------------------
     // Shared connection for this DAO
@@ -23,6 +27,9 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             VALUES (?, ?, ?, ?, ?)
             RETURNING id
             """;
+
+        log.debug("LoanDAO.save called (bookId={}, memberId={}, checkoutDate={}, dueDate={}, returnDate={}).",
+                loan.getBookId(), loan.getMemberId(), loan.getCheckoutDate(), loan.getDueDate(), loan.getReturnDate());
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
@@ -39,8 +46,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    loan.setId(rs.getLong("id"));
+                    long id = rs.getLong("id");
+                    loan.setId(id);
+                    log.info("Loan inserted successfully with id={}.", id);
                 } else {
+                    log.warn("Insert succeeded but no id was returned (unexpected).");
                     throw new RuntimeException("Failed to save loan: no id returned.");
                 }
             }
@@ -48,6 +58,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             return loan;
 
         } catch (SQLException e) {
+            log.error("SQL error while saving loan (bookId={}, memberId={}).",
+                    loan.getBookId(), loan.getMemberId(), e);
             throw new RuntimeException("Failed to save loan", e);
         }
     }
@@ -60,16 +72,24 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             WHERE id = ?
             """;
 
+        log.debug("LoanDAO.findById called (id={}).", id);
+
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
 
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
-                return Optional.of(mapRow(rs));
+                if (!rs.next()) {
+                    log.debug("No loan found for id={}.", id);
+                    return Optional.empty();
+                }
+                LoanEntity entity = mapRow(rs);
+                log.debug("Loan found for id={}.", id);
+                return Optional.of(entity);
             }
 
         } catch (SQLException e) {
+            log.error("SQL error while finding loan by id={}.", id, e);
             throw new RuntimeException("Failed to find loan by id=" + id, e);
         }
     }
@@ -82,6 +102,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             ORDER BY checkout_date DESC
             """;
 
+        log.debug("LoanDAO.findAll called.");
+
         List<LoanEntity> loans = new ArrayList<>();
 
         try (PreparedStatement ps = connection.prepareStatement(sql);
@@ -91,9 +113,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 loans.add(mapRow(rs));
             }
 
+            log.debug("LoanDAO.findAll returning {} loans.", loans.size());
             return loans;
 
         } catch (SQLException e) {
+            log.error("SQL error while retrieving all loans.", e);
             throw new RuntimeException("Failed to retrieve loans", e);
         }
     }
@@ -105,6 +129,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             SET book_id = ?, member_id = ?, checkout_date = ?, due_date = ?, return_date = ?
             WHERE id = ?
             """;
+
+        log.debug("LoanDAO.update called (id={}).", loan.getId());
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
@@ -123,12 +149,16 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
+                log.warn("Unexpected row count updating loan id={}. rows={}", loan.getId(), rows);
                 throw new RuntimeException(
                         "Failed to update loan id=" + loan.getId() + " (rows=" + rows + ")"
                 );
             }
 
+            log.info("Loan updated successfully (id={}).", loan.getId());
+
         } catch (SQLException e) {
+            log.error("SQL error while updating loan id={}.", loan.getId(), e);
             throw new RuntimeException("Failed to update loan id=" + loan.getId(), e);
         }
     }
@@ -140,18 +170,24 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             WHERE id = ?
             """;
 
+        log.debug("LoanDAO.deleteById called (id={}).", id);
+
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
+                log.warn("Unexpected row count deleting loan id={}. rows={}", id, rows);
                 throw new RuntimeException(
                         "Failed to delete loan id=" + id + " (rows=" + rows + ")"
                 );
             }
 
+            log.info("Loan deleted successfully (id={}).", id);
+
         } catch (SQLException e) {
+            log.error("SQL error while deleting loan id={}.", id, e);
             throw new RuntimeException("Failed to delete loan id=" + id, e);
         }
     }
@@ -168,6 +204,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             ORDER BY checkout_date DESC
             """;
 
+        log.debug("LoanDAO.findByMemberId called (memberId={}).", memberId);
+
         List<LoanEntity> loans = new ArrayList<>();
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -180,9 +218,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 }
             }
 
+            log.debug("LoanDAO.findByMemberId returning {} loans for memberId={}.", loans.size(), memberId);
             return loans;
 
         } catch (SQLException e) {
+            log.error("SQL error while finding loans for memberId={}.", memberId, e);
             throw new RuntimeException("Failed to find loans for memberId=" + memberId, e);
         }
     }
@@ -195,6 +235,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             ORDER BY due_date
             """;
 
+        log.debug("LoanDAO.findActiveLoans called.");
+
         List<LoanEntity> loans = new ArrayList<>();
 
         try (PreparedStatement ps = connection.prepareStatement(sql);
@@ -204,9 +246,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 loans.add(mapRow(rs));
             }
 
+            log.debug("LoanDAO.findActiveLoans returning {} loans.", loans.size());
             return loans;
 
         } catch (SQLException e) {
+            log.error("SQL error while finding active loans.", e);
             throw new RuntimeException("Failed to find active loans", e);
         }
     }
@@ -220,6 +264,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             ORDER BY due_date
             """;
 
+        log.debug("LoanDAO.findOverdueLoans called (currentDate={}).", currentDate);
+
         List<LoanEntity> loans = new ArrayList<>();
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -232,9 +278,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 }
             }
 
+            log.debug("LoanDAO.findOverdueLoans returning {} loans for date={}.", loans.size(), currentDate);
             return loans;
 
         } catch (SQLException e) {
+            log.error("SQL error while finding overdue loans for date={}.", currentDate, e);
             throw new RuntimeException("Failed to find overdue loans", e);
         }
     }

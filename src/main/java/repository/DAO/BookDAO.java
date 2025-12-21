@@ -1,5 +1,7 @@
 package repository.DAO;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import repository.entities.BookEntity;
 import util.DbConnectionUtil;
 
@@ -13,6 +15,8 @@ import java.util.Optional;
  */
 public class BookDAO implements BaseDAO<BookEntity> {
 
+    private static final Logger log = LoggerFactory.getLogger(BookDAO.class);
+
     // --------------------------------------------------
     // Shared connection for this DAO
     // --------------------------------------------------
@@ -23,6 +27,8 @@ public class BookDAO implements BaseDAO<BookEntity> {
         final String sql =
                 "INSERT INTO books (title, author, isbn, publication_year) " +
                         "VALUES (?, ?, ?, ?) RETURNING id;";
+
+        log.debug("BookDAO.save called (title='{}', author='{}').", book.getTitle(), book.getAuthor());
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
@@ -43,8 +49,11 @@ public class BookDAO implements BaseDAO<BookEntity> {
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    book.setId(rs.getLong("id"));
+                    long id = rs.getLong("id");
+                    book.setId(id);
+                    log.info("Book inserted successfully with id={}.", id);
                 } else {
+                    log.warn("Insert succeeded but no id was returned (unexpected).");
                     throw new RuntimeException("Failed to save book: no id returned.");
                 }
             }
@@ -52,6 +61,8 @@ public class BookDAO implements BaseDAO<BookEntity> {
             return book;
 
         } catch (SQLException e) {
+            log.error("SQL error while saving book (title='{}', author='{}').",
+                    book.getTitle(), book.getAuthor(), e);
             throw new RuntimeException("Failed to save book", e);
         }
     }
@@ -62,18 +73,24 @@ public class BookDAO implements BaseDAO<BookEntity> {
                 "SELECT id, title, author, isbn, publication_year " +
                         "FROM books WHERE id = ?;";
 
+        log.debug("BookDAO.findById called (id={}).", id);
+
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
+                    log.debug("No book found for id={}.", id);
                     return Optional.empty();
                 }
-                return Optional.of(mapRow(rs));
+                BookEntity entity = mapRow(rs);
+                log.debug("Book found for id={}.", id);
+                return Optional.of(entity);
             }
 
         } catch (SQLException e) {
+            log.error("SQL error while finding book by id={}.", id, e);
             throw new RuntimeException("Failed to find book id=" + id, e);
         }
     }
@@ -84,6 +101,8 @@ public class BookDAO implements BaseDAO<BookEntity> {
                 "SELECT id, title, author, isbn, publication_year " +
                         "FROM books ORDER BY id;";
 
+        log.debug("BookDAO.findAll called.");
+
         List<BookEntity> books = new ArrayList<>();
 
         try (PreparedStatement ps = connection.prepareStatement(sql);
@@ -93,9 +112,11 @@ public class BookDAO implements BaseDAO<BookEntity> {
                 books.add(mapRow(rs));
             }
 
+            log.debug("BookDAO.findAll returning {} books.", books.size());
             return books;
 
         } catch (SQLException e) {
+            log.error("SQL error while retrieving all books.", e);
             throw new RuntimeException("Failed to retrieve books", e);
         }
     }
@@ -106,6 +127,8 @@ public class BookDAO implements BaseDAO<BookEntity> {
                 "UPDATE books " +
                         "SET title = ?, author = ?, isbn = ?, publication_year = ? " +
                         "WHERE id = ?;";
+
+        log.debug("BookDAO.update called (id={}).", book.getId());
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
@@ -128,12 +151,16 @@ public class BookDAO implements BaseDAO<BookEntity> {
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
+                log.warn("Unexpected row count updating book id={}. rows={}", book.getId(), rows);
                 throw new RuntimeException(
                         "Failed to update book id=" + book.getId() + " (rows=" + rows + ")"
                 );
             }
 
+            log.info("Book updated successfully (id={}).", book.getId());
+
         } catch (SQLException e) {
+            log.error("SQL error while updating book id={}.", book.getId(), e);
             throw new RuntimeException("Failed to update book id=" + book.getId(), e);
         }
     }
@@ -142,18 +169,24 @@ public class BookDAO implements BaseDAO<BookEntity> {
     public void deleteById(long id) {
         final String sql = "DELETE FROM books WHERE id = ?;";
 
+        log.debug("BookDAO.deleteById called (id={}).", id);
+
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             ps.setLong(1, id);
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
+                log.warn("Unexpected row count deleting book id={}. rows={}", id, rows);
                 throw new RuntimeException(
                         "Failed to delete book id=" + id + " (rows=" + rows + ")"
                 );
             }
 
+            log.info("Book deleted successfully (id={}).", id);
+
         } catch (SQLException e) {
+            log.error("SQL error while deleting book id={}.", id, e);
             throw new RuntimeException("Failed to delete book id=" + id, e);
         }
     }

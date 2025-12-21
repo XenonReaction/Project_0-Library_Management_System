@@ -1,62 +1,76 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
-    <!-- Change these if you want -->
+    <!-- =======================
+         Properties
+         ======================= -->
     <property name="LOG_DIR" value="logs"/>
-    <property name="APP_NAME" value="library-app"/>
+    <property name="APP_LOG" value="${LOG_DIR}/app.log"/>
 
-    <!-- Console log pattern -->
-    <property name="CONSOLE_PATTERN"
-              value="%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
-
-    <!-- File log pattern -->
-    <property name="FILE_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
-
-    <!-- Console Appender -->
+    <!-- =======================
+         Console Appender
+         ======================= -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>${CONSOLE_PATTERN}</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <!-- Rolling File Appender -->
+    <!-- =======================
+         Rolling File Appender
+         ======================= -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <!-- Current log file -->
-        <file>${LOG_DIR}/${APP_NAME}.log</file>
+        <file>${APP_LOG}</file>
 
-        <!-- Roll by time + size -->
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <!-- Archive pattern -->
-            <fileNamePattern>${LOG_DIR}/archive/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-
-            <!-- Max size per file before creating next index -->
-            <maxFileSize>10MB</maxFileSize>
-
-            <!-- Keep N days -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- Daily log files -->
+            <fileNamePattern>${LOG_DIR}/app.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- Keep 14 days -->
             <maxHistory>14</maxHistory>
-
-            <!-- Cap total archived logs -->
-            <totalSizeCap>1GB</totalSizeCap>
+            <!-- Total size cap for all archived logs -->
+            <totalSizeCap>250MB</totalSizeCap>
         </rollingPolicy>
 
         <encoder>
-            <pattern>${FILE_PATTERN}</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <!-- Optional: Reduce noise from libraries -->
-    <logger name="org.postgresql" level="INFO"/>
-    <logger name="ch.qos.logback" level="WARN"/>
+    <!-- =======================
+         Package-based log levels
+         ======================= -->
 
-    <!-- Your app packages (adjust if yours differ) -->
-    <logger name="controller" level="DEBUG"/>
-    <logger name="service" level="DEBUG"/>
-    <logger name="repository" level="DEBUG"/>
-    <logger name="util" level="INFO"/>
+    <!-- Controllers: readable, high signal -->
+    <logger name="controller" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
 
-    <!-- Root Logger -->
-    <root level="INFO">
+    <!-- Services: detailed flow -->
+    <logger name="service" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- Repository/DAO: detailed DB work -->
+    <logger name="repository" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- Utilities: calmer by default (bump to DEBUG when troubleshooting) -->
+    <logger name="util" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- Optional: if you see JDBC/Postgres spam, you can clamp it down -->
+    <!--
+    <logger name="org.postgresql" level="WARN"/>
+    -->
+
+    <!-- Root: keeps 3rd party libs quiet -->
+    <root level="WARN">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </root>
