@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import service.LoanService;
 import service.models.Loan;
 import util.InputUtil;
+import util.validators.LoanValidator;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -109,17 +110,21 @@ public class LoanController {
         System.out.println("=== CHECKOUT BOOK ===");
 
         try {
-            long bookId = InputUtil.readInt("Book ID: ");
-            long memberId = InputUtil.readInt("Member ID: ");
-            int daysInput = InputUtil.readInt("Loan length in days (0 for default 14): ");
-            int days = (daysInput <= 0) ? 14 : daysInput;
+            // Inline validation per field (BookController style)
+            long bookId = promptValidBookIdCheckout();
+            long memberId = promptValidMemberIdCheckout();
+            int loanDays = promptLoanLengthDaysCheckout(); // normalized (defaults to 14)
 
             LocalDate checkoutDate = LocalDate.now();
-            LocalDate dueDate = checkoutDate.plusDays(days);
+            LocalDate dueDate = checkoutDate.plusDays(loanDays);
+
+            // Validate derived dates against constraints (defensive)
+            LoanValidator.requireValidCheckoutDate(checkoutDate);
+            LoanValidator.requireValidDueDate(dueDate, checkoutDate);
 
             log.debug(
-                    "Checkout input - bookId={}, memberId={}, checkoutDate={}, dueDate={}",
-                    bookId, memberId, checkoutDate, dueDate
+                    "Checkout validated input - bookId={}, memberId={}, loanDays={}, checkoutDate={}, dueDate={}",
+                    bookId, memberId, loanDays, checkoutDate, dueDate
             );
 
             Loan loan = new Loan();
@@ -135,12 +140,10 @@ public class LoanController {
             System.out.println("Checkout successful. Created loan id=" + id);
             System.out.println("Due date: " + dueDate);
 
-        } catch (IllegalArgumentException ex) {
-            log.warn("Validation error during checkout: {}", ex.getMessage());
-            System.out.println("Could not checkout book: " + ex.getMessage());
         } catch (RuntimeException ex) {
+            // Note: inline validators throw IllegalArgumentException, which is a RuntimeException
             log.error("Unexpected error during checkout.", ex);
-            System.out.println("Error checking out book.");
+            System.out.println("Could not checkout book: " + ex.getMessage());
         }
     }
 
@@ -149,7 +152,11 @@ public class LoanController {
         System.out.println("=== RETURN BOOK ===");
 
         try {
-            long loanId = InputUtil.readInt("Loan ID to return: ");
+            long loanId = promptValidLoanIdReturn();
+
+            // If you later choose to let users enter a custom return date, validate it
+            // against the loan's checkout date in the service layer (because you need
+            // the existing loan to compare).
             LocalDate returnDate = LocalDate.now();
 
             log.debug("Return requested for loanId={} on {}", loanId, returnDate);
@@ -163,12 +170,9 @@ public class LoanController {
                 System.out.println("No active loan found with id=" + loanId + " (nothing returned).");
             }
 
-        } catch (IllegalArgumentException ex) {
-            log.warn("Validation error during return: {}", ex.getMessage());
-            System.out.println("Could not return loan: " + ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Unexpected error during return.", ex);
-            System.out.println("Error returning book.");
+            System.out.println("Could not return loan: " + ex.getMessage());
         }
     }
 
@@ -176,7 +180,7 @@ public class LoanController {
         System.out.println();
         System.out.println("=== FIND LOAN ===");
 
-        long id = InputUtil.readInt("Loan ID: ");
+        long id = promptValidLoanIdFind();
         log.debug("Find Loan requested for id={}", id);
 
         try {
@@ -200,7 +204,7 @@ public class LoanController {
         System.out.println();
         System.out.println("=== DELETE LOAN ===");
 
-        long id = InputUtil.readInt("Loan ID to delete: ");
+        long id = promptValidLoanIdDelete();
         log.debug("Delete Loan requested for id={}", id);
 
         try {
@@ -244,7 +248,7 @@ public class LoanController {
         System.out.println();
         System.out.println("=== LOANS BY MEMBER ===");
 
-        long memberId = InputUtil.readInt("Member ID: ");
+        long memberId = promptValidMemberIdListByMember();
         log.debug("Listing loans for memberId={}", memberId);
 
         try {
@@ -286,6 +290,105 @@ public class LoanController {
         } catch (RuntimeException ex) {
             log.error("Error retrieving overdue loans.", ex);
             System.out.println("Error retrieving overdue loans.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Inline prompt + validation helpers (BookController-style)
+    // -------------------------------------------------------------------------
+
+    private long promptValidBookIdCheckout() {
+        while (true) {
+            long input = InputUtil.readInt("Book ID: ");
+            try {
+                return LoanValidator.requireValidBookId(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid bookId input: {}", ex.getMessage());
+                System.out.println("Invalid Book ID: " + ex.getMessage());
+            }
+        }
+    }
+
+    private long promptValidMemberIdCheckout() {
+        while (true) {
+            long input = InputUtil.readInt("Member ID: ");
+            try {
+                return LoanValidator.requireValidMemberId(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid memberId input: {}", ex.getMessage());
+                System.out.println("Invalid Member ID: " + ex.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Prompts for the loan length:
+     * - 0 or less => default 14
+     * - positive => use as-is
+     *
+     * (Not a DB constraint, but matches your existing controller behavior.)
+     */
+    private int promptLoanLengthDaysCheckout() {
+        while (true) {
+            int input = InputUtil.readInt("Loan length in days (0 for default 14): ");
+            if (input <= 0) return 14;
+
+            // Optional sanity cap (feel free to remove). Helps prevent fat-finger errors.
+            if (input > 3650) {
+                log.warn("Unreasonably large loan length entered: {}", input);
+                System.out.println("That loan length seems too large. Please enter a smaller number.");
+                continue;
+            }
+
+            return input;
+        }
+    }
+
+    private long promptValidLoanIdReturn() {
+        while (true) {
+            long input = InputUtil.readInt("Loan ID to return: ");
+            if (input <= 0) {
+                log.warn("Invalid loanId input (return): {}", input);
+                System.out.println("Invalid Loan ID: must be a positive number.");
+                continue;
+            }
+            return input;
+        }
+    }
+
+    private long promptValidLoanIdFind() {
+        while (true) {
+            long input = InputUtil.readInt("Loan ID: ");
+            if (input <= 0) {
+                log.warn("Invalid loanId input (find): {}", input);
+                System.out.println("Invalid Loan ID: must be a positive number.");
+                continue;
+            }
+            return input;
+        }
+    }
+
+    private long promptValidLoanIdDelete() {
+        while (true) {
+            long input = InputUtil.readInt("Loan ID to delete: ");
+            if (input <= 0) {
+                log.warn("Invalid loanId input (delete): {}", input);
+                System.out.println("Invalid Loan ID: must be a positive number.");
+                continue;
+            }
+            return input;
+        }
+    }
+
+    private long promptValidMemberIdListByMember() {
+        while (true) {
+            long input = InputUtil.readInt("Member ID: ");
+            try {
+                return LoanValidator.requireValidMemberId(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid memberId input (list by member): {}", ex.getMessage());
+                System.out.println("Invalid Member ID: " + ex.getMessage());
+            }
         }
     }
 }
