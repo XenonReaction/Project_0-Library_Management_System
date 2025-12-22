@@ -40,3 +40,4 @@ build/
 
 ### Custom ignores ###
 src/main/resources/*.properties
+logs/

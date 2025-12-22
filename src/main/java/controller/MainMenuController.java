@@ -29,7 +29,7 @@ public class MainMenuController {
             try {
                 printMenu();
                 int choice = InputUtil.readInt("Make a choice: ");
-                log.debug("Main menu selection received: {}", choice);
+                log.debug("app.Main menu selection received: {}", choice);
 
                 switch (choice) {
                     case 1 -> {

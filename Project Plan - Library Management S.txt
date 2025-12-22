@@ -150,7 +150,7 @@ Many-to-Many Relationship:
 
 5. Console Interaction Design
 -----------------------------
-Main application loop:
+app.Main application loop:
     - Display main menu:
         1. Manage Books
         2. Manage Members
@@ -167,14 +167,14 @@ Sub-menus (examples):
         2. List All Books
         3. Update Book (optional)
         4. Delete Book (optional)
-        0. Back to Main Menu
+        0. Back to app.Main Menu
 
     Manage Members:
         1. Add Member
         2. List All Members
         3. Update Member (optional)
         4. Delete Member (optional)
-        0. Back to Main Menu
+        0. Back to app.Main Menu
 
     Manage Loans:
         1. Check Out Book
@@ -182,7 +182,7 @@ Sub-menus (examples):
         3. List Loans by Member
         4. List All Active Loans (loaned-out books)
         5. List Overdue Loans
-        0. Back to Main Menu
+        0. Back to app.Main Menu
 
 Error Handling (Console):
     - Handle invalid menu selection (e.g., non-existing option)

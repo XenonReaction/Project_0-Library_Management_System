@@ -92,8 +92,8 @@ src/main/java
 │   ├── InputUtil
 │   └── ValidationUtil
 │
-├── Main
-└── DebugMain
+├── app.Main
+└── app.DebugMain
 ```
 
 ### Layer Responsibilities
@@ -150,7 +150,7 @@ src/main/java
 
 ## 5. Console Interaction Design
 
-### Main Menu
+### app.Main Menu
 ```
 1. Manage Books
 2. Manage Members
