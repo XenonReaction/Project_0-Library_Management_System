@@ -1,70 +1,123 @@
-2025-12-21 16:21:25.729 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.738 [main] DEBUG service.LoanService - create(Loan) called.
-2025-12-21 16:21:25.762 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.767 [main] DEBUG service.LoanService - update called for id=999
-2025-12-21 16:21:25.770 [main] INFO  service.LoanService - update failed: no loan found with id=999
-2025-12-21 16:21:25.773 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.774 [main] DEBUG service.LoanService - getLoansByMemberId called. memberId=0
-2025-12-21 16:21:25.774 [main] WARN  service.LoanService - getLoansByMemberId called with invalid memberId=0
-2025-12-21 16:21:25.774 [main] DEBUG service.LoanService - getLoansByMemberId called. memberId=-10
-2025-12-21 16:21:25.774 [main] WARN  service.LoanService - getLoansByMemberId called with invalid memberId=-10
-2025-12-21 16:21:25.777 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.778 [main] DEBUG service.LoanService - getActiveLoans called.
-2025-12-21 16:21:25.779 [main] DEBUG service.LoanService - getActiveLoans returning 2 loans.
-2025-12-21 16:21:25.782 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.783 [main] DEBUG service.LoanService - create(Loan) called.
-2025-12-21 16:21:25.783 [main] INFO  service.LoanService - Loan created successfully with id=100 (bookId=5, memberId=7)
-2025-12-21 16:21:25.785 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.786 [main] INFO  service.LoanService - No loan found with id=999
-2025-12-21 16:21:25.788 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.789 [main] DEBUG service.LoanService - update called for id=100
-2025-12-21 16:21:25.789 [main] INFO  service.LoanService - Loan updated successfully for id=100
-2025-12-21 16:21:25.790 [main] DEBUG service.LoanService - LoanService initialized with injected LoanDAO.
-2025-12-21 16:21:25.791 [main] DEBUG service.LoanService - getOverdueLoans called. currentDate=null
-2025-12-21 16:21:25.808 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.810 [main] DEBUG service.BookService - update called for id=10
-2025-12-21 16:21:25.811 [main] INFO  service.BookService - Book updated successfully for id=10
-2025-12-21 16:21:25.812 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.814 [main] DEBUG service.BookService - Book found with id=10
-2025-12-21 16:21:25.815 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.816 [main] DEBUG service.BookService - getAll called.
-2025-12-21 16:21:25.816 [main] DEBUG service.BookService - getAll returning 2 books.
-2025-12-21 16:21:25.817 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.818 [main] DEBUG service.BookService - delete called for id=10
-2025-12-21 16:21:25.818 [main] INFO  service.BookService - Book deleted successfully for id=10
-2025-12-21 16:21:25.823 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.824 [main] DEBUG service.BookService - delete called for id=999
-2025-12-21 16:21:25.824 [main] INFO  service.BookService - delete skipped: no book found with id=999
-2025-12-21 16:21:25.826 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.826 [main] WARN  service.BookService - getById called with invalid id=0
-2025-12-21 16:21:25.826 [main] WARN  service.BookService - getById called with invalid id=-5
-2025-12-21 16:21:25.826 [main] WARN  service.BookService - getById called with invalid id=null
-2025-12-21 16:21:25.827 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.828 [main] DEBUG service.BookService - create(Book) called.
-2025-12-21 16:21:25.829 [main] INFO  service.BookService - Book created successfully with id=10
-2025-12-21 16:21:25.832 [main] DEBUG service.BookService - BookService initialized with injected BookDAO.
-2025-12-21 16:21:25.832 [main] DEBUG service.BookService - create(Book) called.
-2025-12-21 16:21:25.847 [main] DEBUG service.MemberService - MemberService initialized with injected MemberDAO.
-2025-12-21 16:21:25.849 [main] DEBUG service.MemberService - create(Member) called.
-2025-12-21 16:21:25.849 [main] INFO  service.MemberService - Member created successfully with id=30
-2025-12-21 16:21:25.851 [main] DEBUG service.MemberService - MemberService initialized with injected MemberDAO.
-2025-12-21 16:21:25.851 [main] DEBUG service.MemberService - update called for id=999
-2025-12-21 16:21:25.852 [main] INFO  service.MemberService - update failed: no member found with id=999
-2025-12-21 16:21:25.853 [main] DEBUG service.MemberService - MemberService initialized with injected MemberDAO.
-2025-12-21 16:21:25.853 [main] DEBUG service.MemberService - delete called for id=25
-2025-12-21 16:21:25.853 [main] INFO  service.MemberService - Member deleted successfully for id=25
-2025-12-21 16:21:25.855 [main] DEBUG service.MemberService - MemberService initialized with injected MemberDAO.
-2025-12-21 16:21:25.855 [main] DEBUG service.MemberService - delete called for id=null
-2025-12-21 16:21:25.855 [main] WARN  service.MemberService - delete called with invalid id=null
-2025-12-21 16:21:25.855 [main] DEBUG service.MemberService - delete called for id=0
-2025-12-21 16:21:25.855 [main] WARN  service.MemberService - delete called with invalid id=0
-2025-12-21 16:21:25.855 [main] DEBUG service.MemberService - delete called for id=-1
-2025-12-21 16:21:25.855 [main] WARN  service.MemberService - delete called with invalid id=-1
-2025-12-21 16:21:25.856 [main] DEBUG service.MemberService - MemberService initialized with injected MemberDAO.
-2025-12-21 16:21:25.857 [main] DEBUG service.MemberService - create(Member) called.
-2025-12-21 16:21:25.858 [main] DEBUG service.MemberService - MemberService initialized with injected MemberDAO.
-2025-12-21 16:21:25.858 [main] DEBUG service.MemberService - create(Member) called.
-2025-12-21 16:21:25.858 [main] INFO  service.MemberService - Member created successfully with id=25
-2025-12-21 16:21:25.859 [main] DEBUG service.MemberService - MemberService initialized with injected MemberDAO.
-2025-12-21 16:21:25.859 [main] DEBUG service.MemberService - update called for id=25
-2025-12-21 16:21:25.859 [main] INFO  service.MemberService - Member updated successfully for id=25
+2025-12-22 07:55:02.005 [main] INFO  util.DbConnectionUtil - Database connection established successfully (url=jdbc:postgresql://localhost:5432/postgres, username=postgres).
+2025-12-22 07:55:02.042 [main] DEBUG service.BookService - BookService initialized with default BookDAO.
+2025-12-22 07:55:02.044 [main] DEBUG service.MemberService - MemberService initialized with default MemberDAO.
+2025-12-22 07:55:02.045 [main] DEBUG service.LoanService - LoanService initialized with default LoanDAO.
+2025-12-22 07:55:02.045 [main] INFO  controller.MainMenuController - Application started: Library Management System
+2025-12-22 07:55:06.552 [main] INFO  controller.MainMenuController - User selected Exit. Shutting down.
+2025-12-22 07:55:06.552 [main] INFO  controller.MainMenuController - Application stopped: Library Management System
+2025-12-22 07:55:12.576 [main] INFO  util.DbConnectionUtil - Database connection established successfully (url=jdbc:postgresql://localhost:5432/postgres, username=postgres).
+2025-12-22 07:55:12.579 [main] DEBUG service.BookService - BookService initialized with default BookDAO.
+2025-12-22 07:55:12.580 [main] DEBUG service.MemberService - MemberService initialized with default MemberDAO.
+2025-12-22 07:55:12.581 [main] DEBUG service.LoanService - LoanService initialized with default LoanDAO.
+2025-12-22 07:55:12.581 [main] INFO  controller.MainMenuController - Application started: Library Management System
+2025-12-22 07:55:15.566 [main] INFO  controller.MainMenuController - Navigating to Book Services
+2025-12-22 07:55:15.566 [main] INFO  controller.BookController - Entered Book Services menu.
+2025-12-22 07:55:18.310 [main] INFO  controller.BookController - Listing all books.
+2025-12-22 07:55:18.310 [main] DEBUG service.BookService - getAll called.
+2025-12-22 07:55:18.310 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll called.
+2025-12-22 07:55:18.328 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll returning 5 books.
+2025-12-22 07:55:18.330 [main] DEBUG service.BookService - getAll returning 5 books.
+2025-12-22 07:55:56.692 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=6).
+2025-12-22 07:55:56.696 [main] DEBUG repository.DAO.BookDAO - No book found for id=6.
+2025-12-22 07:55:56.696 [main] INFO  service.BookService - No book found with id=6
+2025-12-22 07:55:56.696 [main] INFO  controller.BookController - No book found with id=6
+2025-12-22 07:56:30.274 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=6).
+2025-12-22 07:56:30.275 [main] DEBUG repository.DAO.BookDAO - No book found for id=6.
+2025-12-22 07:56:30.275 [main] INFO  service.BookService - No book found with id=6
+2025-12-22 07:56:30.275 [main] INFO  controller.BookController - No book found to update with id=6
+2025-12-22 07:56:52.694 [main] INFO  controller.BookController - Exiting Book Services menu.
+2025-12-22 07:56:54.289 [main] INFO  controller.MainMenuController - Navigating to Member Services
+2025-12-22 07:56:54.289 [main] INFO  controller.MemberController - Entered Member Services menu.
+2025-12-22 07:56:56.042 [main] INFO  controller.MemberController - Listing all members.
+2025-12-22 07:56:56.042 [main] DEBUG service.MemberService - getAll called.
+2025-12-22 07:56:56.042 [main] DEBUG repository.DAO.MemberDAO - MemberDAO.findAll called.
+2025-12-22 07:56:56.046 [main] DEBUG repository.DAO.MemberDAO - MemberDAO.findAll returning 3 members.
+2025-12-22 07:56:56.046 [main] DEBUG service.MemberService - getAll returning 3 members.
+2025-12-22 08:00:45.722 [main] INFO  util.DbConnectionUtil - Database connection established successfully (url=jdbc:postgresql://localhost:5432/postgres, username=postgres).
+2025-12-22 08:00:45.725 [main] DEBUG service.BookService - BookService initialized with default BookDAO.
+2025-12-22 08:00:45.726 [main] DEBUG service.MemberService - MemberService initialized with default MemberDAO.
+2025-12-22 08:00:45.727 [main] DEBUG service.LoanService - LoanService initialized with default LoanDAO.
+2025-12-22 08:00:45.727 [main] INFO  controller.MainMenuController - Application started: Library Management System
+2025-12-22 08:00:48.439 [main] INFO  controller.MainMenuController - Navigating to Book Services
+2025-12-22 08:00:48.439 [main] INFO  controller.BookController - Entered Book Services menu.
+2025-12-22 08:00:57.034 [main] INFO  controller.BookController - Listing all books.
+2025-12-22 08:00:57.034 [main] DEBUG service.BookService - getAll called.
+2025-12-22 08:00:57.034 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll called.
+2025-12-22 08:00:57.043 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll returning 5 books.
+2025-12-22 08:00:57.044 [main] DEBUG service.BookService - getAll returning 5 books.
+2025-12-22 08:01:45.655 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=6).
+2025-12-22 08:01:45.657 [main] DEBUG repository.DAO.BookDAO - No book found for id=6.
+2025-12-22 08:01:45.657 [main] INFO  service.BookService - No book found with id=6
+2025-12-22 08:01:45.657 [main] INFO  controller.BookController - No book found with id=6
+2025-12-22 08:01:52.639 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=5).
+2025-12-22 08:01:52.641 [main] DEBUG repository.DAO.BookDAO - Book found for id=5.
+2025-12-22 08:01:52.641 [main] DEBUG service.BookService - Book found with id=5
+2025-12-22 08:01:52.641 [main] INFO  controller.BookController - Book found with id=5
+2025-12-22 08:02:25.480 [main] WARN  util.InputUtil - Invalid integer input received: ''
+2025-12-22 08:24:46.175 [main] INFO  util.DbConnectionUtil - Database connection established successfully (url=jdbc:postgresql://localhost:5432/postgres, username=postgres).
+2025-12-22 08:24:46.176 [main] DEBUG service.BookService - BookService initialized with default BookDAO.
+2025-12-22 08:24:46.178 [main] DEBUG service.MemberService - MemberService initialized with default MemberDAO.
+2025-12-22 08:24:46.179 [main] DEBUG service.LoanService - LoanService initialized with default LoanDAO.
+2025-12-22 08:24:46.179 [main] INFO  controller.MainMenuController - Application started: Library Management System
+2025-12-22 08:24:50.947 [main] INFO  controller.MainMenuController - Navigating to Book Services
+2025-12-22 08:24:50.947 [main] INFO  controller.BookController - Entered Book Services menu.
+2025-12-22 08:24:55.589 [main] INFO  controller.BookController - Listing all books.
+2025-12-22 08:24:55.589 [main] DEBUG service.BookService - getAll called.
+2025-12-22 08:24:55.589 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll called.
+2025-12-22 08:24:55.600 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll returning 5 books.
+2025-12-22 08:24:55.601 [main] DEBUG service.BookService - getAll returning 5 books.
+2025-12-22 08:25:06.168 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=5).
+2025-12-22 08:25:06.170 [main] DEBUG repository.DAO.BookDAO - Book found for id=5.
+2025-12-22 08:25:06.171 [main] DEBUG service.BookService - Book found with id=5
+2025-12-22 08:25:06.171 [main] INFO  controller.BookController - Book found with id=5
+2025-12-22 08:25:15.738 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=6).
+2025-12-22 08:25:15.739 [main] DEBUG repository.DAO.BookDAO - No book found for id=6.
+2025-12-22 08:25:15.739 [main] INFO  service.BookService - No book found with id=6
+2025-12-22 08:25:15.739 [main] INFO  controller.BookController - No book found with id=6
+2025-12-22 08:25:19.956 [main] WARN  util.InputUtil - Invalid integer input received: 'k'
+2025-12-22 08:25:34.681 [main] WARN  util.InputUtil - Invalid integer input received: '123456789123456789'
+2025-12-22 08:25:44.694 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=12).
+2025-12-22 08:25:44.695 [main] DEBUG repository.DAO.BookDAO - No book found for id=12.
+2025-12-22 08:25:44.695 [main] INFO  service.BookService - No book found with id=12
+2025-12-22 08:25:44.695 [main] INFO  controller.BookController - No book found with id=12
+2025-12-22 08:26:10.208 [main] DEBUG service.BookService - delete called for id=6
+2025-12-22 08:26:10.208 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=6).
+2025-12-22 08:26:10.209 [main] DEBUG repository.DAO.BookDAO - No book found for id=6.
+2025-12-22 08:26:10.209 [main] INFO  service.BookService - delete skipped: no book found with id=6
+2025-12-22 08:26:10.210 [main] INFO  controller.BookController - No book found to delete with id=6
+2025-12-22 08:26:18.612 [main] DEBUG service.BookService - delete called for id=5
+2025-12-22 08:26:18.612 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=5).
+2025-12-22 08:26:18.613 [main] DEBUG repository.DAO.BookDAO - Book found for id=5.
+2025-12-22 08:26:18.613 [main] DEBUG repository.DAO.BookDAO - BookDAO.deleteById called (id=5).
+2025-12-22 08:26:18.623 [main] INFO  repository.DAO.BookDAO - Book deleted successfully (id=5).
+2025-12-22 08:26:18.623 [main] INFO  service.BookService - Book deleted successfully for id=5
+2025-12-22 08:26:18.623 [main] INFO  controller.BookController - Book deleted successfully with id=5
+2025-12-22 08:26:37.624 [main] INFO  controller.BookController - Listing all books.
+2025-12-22 08:26:37.624 [main] DEBUG service.BookService - getAll called.
+2025-12-22 08:26:37.624 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll called.
+2025-12-22 08:26:37.626 [main] DEBUG repository.DAO.BookDAO - BookDAO.findAll returning 4 books.
+2025-12-22 08:26:37.626 [main] DEBUG service.BookService - getAll returning 4 books.
+2025-12-22 08:26:48.782 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=5).
+2025-12-22 08:26:48.784 [main] DEBUG repository.DAO.BookDAO - No book found for id=5.
+2025-12-22 08:26:48.784 [main] INFO  service.BookService - No book found with id=5
+2025-12-22 08:26:48.784 [main] INFO  controller.BookController - No book found to update with id=5
+2025-12-22 08:26:58.054 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=4).
+2025-12-22 08:26:58.056 [main] DEBUG repository.DAO.BookDAO - Book found for id=4.
+2025-12-22 08:26:58.056 [main] DEBUG service.BookService - Book found with id=4
+2025-12-22 08:27:23.667 [main] DEBUG service.BookService - update called for id=4
+2025-12-22 08:27:23.667 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=4).
+2025-12-22 08:27:23.670 [main] DEBUG repository.DAO.BookDAO - Book found for id=4.
+2025-12-22 08:27:23.670 [main] DEBUG repository.DAO.BookDAO - BookDAO.update called (id=4).
+2025-12-22 08:27:23.677 [main] INFO  repository.DAO.BookDAO - Book updated successfully (id=4).
+2025-12-22 08:27:23.677 [main] INFO  service.BookService - Book updated successfully for id=4
+2025-12-22 08:27:23.677 [main] INFO  controller.BookController - Book updated successfully for id=4
+2025-12-22 08:27:29.638 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=4).
+2025-12-22 08:27:29.639 [main] DEBUG repository.DAO.BookDAO - Book found for id=4.
+2025-12-22 08:27:29.639 [main] DEBUG service.BookService - Book found with id=4
+2025-12-22 08:27:29.639 [main] INFO  controller.BookController - Book found with id=4
+2025-12-22 08:28:44.848 [main] WARN  util.InputUtil - Invalid integer input received: '-'
+2025-12-22 08:28:52.513 [main] DEBUG repository.DAO.BookDAO - BookDAO.findById called (id=4).
+2025-12-22 08:28:52.515 [main] DEBUG repository.DAO.BookDAO - Book found for id=4.
+2025-12-22 08:28:52.515 [main] DEBUG service.BookService - Book found with id=4
+2025-12-22 08:29:28.892 [main] WARN  util.InputUtil - Invalid integer input received: 'asdf'
+2025-12-22 08:29:34.882 [main] WARN  controller.BookController - Validation error while updating book id=4: ISBN must be 10–20 characters and contain only digits, X/x, or hyphens (e.g., 978-1-4028-9462-6).

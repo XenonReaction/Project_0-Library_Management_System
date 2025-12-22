@@ -6,7 +6,7 @@ import repository.DAO.BookDAO;
 import repository.entities.BookEntity;
 import service.interfaces.ServiceInterface;
 import service.models.Book;
-import util.ValidationUtil;
+import util.validators.ValidationUtil;
 
 import java.util.List;
 import java.util.Optional;

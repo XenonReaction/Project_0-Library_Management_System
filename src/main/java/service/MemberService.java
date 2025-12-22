@@ -6,7 +6,7 @@ import repository.DAO.MemberDAO;
 import repository.entities.MemberEntity;
 import service.interfaces.ServiceInterface;
 import service.models.Member;
-import util.ValidationUtil;
+import util.validators.ValidationUtil;
 
 import java.util.List;
 import java.util.Optional;

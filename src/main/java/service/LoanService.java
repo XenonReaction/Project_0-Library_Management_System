@@ -6,7 +6,7 @@ import repository.DAO.LoanDAO;
 import repository.entities.LoanEntity;
 import service.interfaces.ServiceInterface;
 import service.models.Loan;
-import util.ValidationUtil;
+import util.validators.ValidationUtil;
 
 import java.time.LocalDate;
 import java.util.List;

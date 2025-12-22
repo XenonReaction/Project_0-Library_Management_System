@@ -9,67 +9,75 @@
 
     <!-- =======================
          Console Appender
+         Submission-ready behavior:
+         - Show ONLY WARN/ERROR to avoid cluttering the user menu
          ======================= -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <!-- Keep console short (user is watching this screen) -->
+            <pattern>%d{HH:mm:ss} %-5level %logger{24} - %msg%n</pattern>
         </encoder>
     </appender>
 
     <!-- =======================
          Rolling File Appender
+         Submission-ready behavior:
+         - Capture full details to file for debugging/demo/review
          ======================= -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${APP_LOG}</file>
 
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <!-- Daily log files -->
             <fileNamePattern>${LOG_DIR}/app.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <!-- Keep 14 days -->
             <maxHistory>14</maxHistory>
-            <!-- Total size cap for all archived logs -->
             <totalSizeCap>250MB</totalSizeCap>
         </rollingPolicy>
 
         <encoder>
+            <!-- Keep file detailed (includes full date + thread) -->
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
     <!-- =======================
          Package-based log levels
+         Submission-ready behavior:
+         - Your code logs to FILE (detailed)
+         - Console only shows WARN/ERROR due to console filter above
          ======================= -->
 
-    <!-- Controllers: readable, high signal -->
+    <!-- Controllers: user actions, high signal -->
     <logger name="controller" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
 
-    <!-- Services: detailed flow -->
+    <!-- Services: business flow -->
     <logger name="service" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
 
-    <!-- Repository/DAO: detailed DB work -->
+    <!-- Repository/DAO: DB details -->
     <logger name="repository" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
 
-    <!-- Utilities: calmer by default (bump to DEBUG when troubleshooting) -->
+    <!-- Utilities: usually INFO is enough -->
     <logger name="util" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
 
-    <!-- Optional: if you see JDBC/Postgres spam, you can clamp it down -->
-    <!--
+    <!-- Optional: clamp down noisy third-party logging if it appears -->
     <logger name="org.postgresql" level="WARN"/>
-    -->
 
-    <!-- Root: keeps 3rd party libs quiet -->
+    <!-- Root: keep 3rd party libraries quiet in general -->
     <root level="WARN">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>

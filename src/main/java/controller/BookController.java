@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import service.BookService;
 import service.models.Book;
 import util.InputUtil;
+import util.validators.BookValidator;
 
 import java.util.List;
 import java.util.Optional;
@@ -102,14 +103,13 @@ public class BookController {
         System.out.println("=== ADD BOOK ===");
 
         try {
-            String title = InputUtil.readString("Title: ");
-            String author = InputUtil.readString("Author: ");
-            String isbnInput = InputUtil.readString("ISBN (type NONE if not applicable): ");
-            String isbn = parseOptionalString(isbnInput);
-            int yearInput = InputUtil.readInt("Publication year (enter 0 if not applicable): ");
-            Integer year = (yearInput <= 0) ? null : yearInput;
+            // Inline validation per field
+            String title = promptRequiredTitleCreate();
+            String author = promptRequiredAuthorCreate();
+            String isbn = promptOptionalIsbnCreate();
+            Integer year = promptOptionalPublicationYearCreate();
 
-            log.debug("Add Book input - title={}, author={}, isbn={}, year={}",
+            log.debug("Add Book validated input - title={}, author={}, isbn={}, year={}",
                     title, author, isbn, year);
 
             Book book = new Book(title, author, isbn, year);
@@ -118,9 +118,6 @@ public class BookController {
             log.info("Book created successfully with id={}", id);
             System.out.println("Saved book with id=" + id);
 
-        } catch (IllegalArgumentException ex) {
-            log.warn("Validation error while adding book: {}", ex.getMessage());
-            System.out.println("Could not add book: " + ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Unexpected error while adding book.", ex);
             System.out.println("Error adding book.");
@@ -169,31 +166,27 @@ public class BookController {
             Book existing = maybeExisting.get();
             log.debug("Existing book before update: {}", existing);
 
-            String titleInput = InputUtil.readString("New title: ");
-            String authorInput = InputUtil.readString("New author: ");
-            String isbnInput = InputUtil.readString("New ISBN: ");
-            int yearInput = InputUtil.readInt("New publication year: ");
+            System.out.println("Enter new values.");
+            System.out.println("Use '-' to keep the current value.");
+            System.out.println("For ISBN: '-' keeps current, 'NONE' clears it (NULL), otherwise enter a value.");
+            System.out.println("For year: -1 keeps current, 0 clears it (NULL), otherwise enter a year.");
+
+            // Inline validation per field
+            String title = promptTitleUpdate(existing.getTitle());
+            String author = promptAuthorUpdate(existing.getAuthor());
+            String isbn = promptIsbnUpdate(existing.getIsbn());
+            Integer year = promptPublicationYearUpdate(existing.getPublicationYear());
 
             Book updated = new Book();
-            updated.setTitle("-".equals(titleInput) ? existing.getTitle() : titleInput);
-            updated.setAuthor("-".equals(authorInput) ? existing.getAuthor() : authorInput);
-            updated.setIsbn("-".equals(isbnInput) ? existing.getIsbn() : parseOptionalString(isbnInput));
-
-            if (yearInput == -1) {
-                updated.setPublicationYear(existing.getPublicationYear());
-            } else if (yearInput == 0) {
-                updated.setPublicationYear(null);
-            } else {
-                updated.setPublicationYear(yearInput);
-            }
+            updated.setTitle(title);
+            updated.setAuthor(author);
+            updated.setIsbn(isbn);
+            updated.setPublicationYear(year);
 
             Book result = bookService.update(id, updated);
             log.info("Book updated successfully for id={}", id);
             System.out.println("Updated: " + result);
 
-        } catch (IllegalArgumentException ex) {
-            log.warn("Validation error while updating book id={}: {}", id, ex.getMessage());
-            System.out.println("Could not update book: " + ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Unexpected error while updating book id={}", id, ex);
             System.out.println("Error updating book.");
@@ -222,13 +215,119 @@ public class BookController {
         }
     }
 
-    /**
-     * Converts sentinel strings into a nullable value.
-     */
-    private static String parseOptionalString(String input) {
-        if (input == null) return null;
-        String trimmed = input.trim();
-        if (trimmed.equalsIgnoreCase("NONE")) return null;
-        return trimmed;
+    // -------------------------------------------------------------------------
+    // Inline prompt + validation helpers (CREATE)
+    // -------------------------------------------------------------------------
+
+    private String promptRequiredTitleCreate() {
+        while (true) {
+            String input = InputUtil.readString("Title: ");
+            try {
+                return BookValidator.requireValidTitle(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid title input: {}", ex.getMessage());
+                System.out.println("Invalid title: " + ex.getMessage());
+            }
+        }
+    }
+
+    private String promptRequiredAuthorCreate() {
+        while (true) {
+            String input = InputUtil.readString("Author: ");
+            try {
+                return BookValidator.requireValidAuthor(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid author input: {}", ex.getMessage());
+                System.out.println("Invalid author: " + ex.getMessage());
+            }
+        }
+    }
+
+    private String promptOptionalIsbnCreate() {
+        while (true) {
+            String input = InputUtil.readString("ISBN (type NONE if not applicable): ");
+            try {
+                String normalized = BookValidator.normalizeOptionalIsbn(input);
+                return BookValidator.validateOptionalIsbn(normalized);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid ISBN input: {}", ex.getMessage());
+                System.out.println("Invalid ISBN: " + ex.getMessage());
+            }
+        }
+    }
+
+    private Integer promptOptionalPublicationYearCreate() {
+        while (true) {
+            int input = InputUtil.readInt("Publication year (enter 0 if not applicable): ");
+            try {
+                Integer normalized = BookValidator.normalizeOptionalPublicationYear(input);
+                return BookValidator.validateOptionalPublicationYear(normalized);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid publication year input: {}", ex.getMessage());
+                System.out.println("Invalid year: " + ex.getMessage());
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Inline prompt + validation helpers (UPDATE)
+    // -------------------------------------------------------------------------
+
+    private String promptTitleUpdate(String currentValue) {
+        while (true) {
+            String input = InputUtil.readString("New title: ");
+            if ("-".equals(input)) return currentValue;
+
+            try {
+                return BookValidator.requireValidTitle(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid title input (update): {}", ex.getMessage());
+                System.out.println("Invalid title: " + ex.getMessage());
+            }
+        }
+    }
+
+    private String promptAuthorUpdate(String currentValue) {
+        while (true) {
+            String input = InputUtil.readString("New author: ");
+            if ("-".equals(input)) return currentValue;
+
+            try {
+                return BookValidator.requireValidAuthor(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid author input (update): {}", ex.getMessage());
+                System.out.println("Invalid author: " + ex.getMessage());
+            }
+        }
+    }
+
+    private String promptIsbnUpdate(String currentValue) {
+        while (true) {
+            String input = InputUtil.readString("New ISBN (or NONE to clear): ");
+            if ("-".equals(input)) return currentValue;
+
+            try {
+                String normalized = BookValidator.normalizeOptionalIsbn(input); // NONE/blank -> null
+                return BookValidator.validateOptionalIsbn(normalized);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid ISBN input (update): {}", ex.getMessage());
+                System.out.println("Invalid ISBN: " + ex.getMessage());
+            }
+        }
+    }
+
+    private Integer promptPublicationYearUpdate(Integer currentValue) {
+        while (true) {
+            int input = InputUtil.readInt("New publication year: ");
+            if (input == -1) return currentValue;
+
+            try {
+                Integer normalized = BookValidator.normalizeOptionalPublicationYear(input); // 0/<=0 -> null
+                return BookValidator.validateOptionalPublicationYear(normalized);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid publication year input (update): {}", ex.getMessage());
+                System.out.println("Invalid year: " + ex.getMessage());
+            }
+        }
     }
 }
