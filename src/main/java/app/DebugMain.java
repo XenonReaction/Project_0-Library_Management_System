@@ -24,9 +24,9 @@ public class DebugMain {
         // ---------------------------------------------------------
         // Session banner (FILE only; console stays WARN+)
         // ---------------------------------------------------------
-        log.info("\n\n============================================================");
+        log.info("============================================================");
         log.info("           DEBUG SESSION STARTED (DB RESET MODE)            ");
-        log.info("============================================================\n");
+        log.info("============================================================");
 
         System.out.println("Program started!");
         log.info("DebugMain started. Prompting user for whether to run debugger tests.");
@@ -76,7 +76,7 @@ public class DebugMain {
 
         if (!debug) {
             log.info("User chose not to run debugger tests. Exiting DebugMain session.");
-            log.info("============================================================\n");
+            printExitBanner();
             return;
         }
 
@@ -307,7 +307,16 @@ public class DebugMain {
             log.error("DB connection close failed.", e);
         }
 
-        log.info("Debug session completed.");
+        // ---------------------------------------------------------
+        // Session banner close
+        // ---------------------------------------------------------
+        printExitBanner();
+    }
+
+    private static void printExitBanner() {
+        log.info("============================================================");
+        log.info("           DEBUG SESSION ENDED (DB RESET MODE)              ");
         log.info("============================================================\n");
     }
+
 }

@@ -11,10 +11,15 @@ public class Main {
     public static void main(String[] args) {
 
         // Visual separator between application runs (sessions)
-        log.info("\n\n============================================================");
-        log.info("               NEW APPLICATION SESSION STARTED               ");
-        log.info("============================================================\n");
+        log.info("============================================================");
+        log.info("               NEW APPLICATION SESSION STARTED              ");
+        log.info("============================================================");
 
         new MainMenuController().start();
+
+        // Visual separator between application runs (sessions)
+        log.info("============================================================");
+        log.info("                 APPLICATION SESSION ENDED                  ");
+        log.info("============================================================\n");
     }
 }

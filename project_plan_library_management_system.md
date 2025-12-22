@@ -42,9 +42,9 @@ This project is designed to meet **Revature Project 0** requirements and emphasi
 
 - **Language:** Java (OpenJDK 25.0.1)
 - **Build Tool:** Maven
-- **Database:** PostgreSQL (via JDBC)
+- **Database:** PostgreSQL (via JDBC, configured in `src/main/resources/database.properties`)
 - **Persistence:** DAO pattern with JDBC
-- **Logging:** Logback (`logback.xml`)
+- **Logging:** Logback (`src/main/resources/logback.xml`)
 - **Testing:** JUnit 5, Mockito
 
 ---
@@ -52,66 +52,90 @@ This project is designed to meet **Revature Project 0** requirements and emphasi
 ## 3. Project Structure & Responsibilities
 
 ```
-src/main/java
-│
-├── controller
-│   ├── MainMenuController
-│   ├── BookController
-│   ├── MemberController
-│   └── LoanController
-│
-├── repository
-│   ├── DAO
-│   │   ├── BaseDAO
-│   │   ├── BookDAO
-│   │   ├── MemberDAO
-│   │   └── LoanDAO
+src
+├── main
+│   ├── java
+│   │   ├── app
+│   │   │   ├── Main
+│   │   │   └── DebugMain
+│   │   │
+│   │   ├── controller
+│   │   │   ├── MainMenuController
+│   │   │   ├── BookController
+│   │   │   ├── MemberController
+│   │   │   └── LoanController
+│   │   │
+│   │   ├── repository
+│   │   │   ├── DAO
+│   │   │   │   ├── BaseDAO
+│   │   │   │   ├── BookDAO
+│   │   │   │   ├── MemberDAO
+│   │   │   │   └── LoanDAO
+│   │   │   │
+│   │   │   ├── entities
+│   │   │   │   ├── BookEntity
+│   │   │   │   ├── MemberEntity
+│   │   │   │   └── LoanEntity
+│   │   │   │
+│   │   │   └── DbSetup
+│   │   │
+│   │   ├── service
+│   │   │   ├── interfaces
+│   │   │   │   └── ServiceInterface
+│   │   │   │
+│   │   │   ├── models
+│   │   │   │   ├── Book
+│   │   │   │   ├── Member
+│   │   │   │   └── Loan
+│   │   │   │
+│   │   │   ├── BookService
+│   │   │   ├── MemberService
+│   │   │   └── LoanService
+│   │   │
+│   │   └── util
+│   │       ├── DbConnectionUtil
+│   │       ├── InputUtil
+│   │       └── validators
+│   │           ├── BookValidator
+│   │           ├── MemberValidator
+│   │           ├── LoanValidator
+│   │           └── ValidationUtil
 │   │
-│   ├── entities
-│   │   ├── BookEntity
-│   │   ├── MemberEntity
-│   │   └── LoanEntity
-│   │
-│   └── DbSetup
+│   └── resources
+│       ├── database.properties
+│       └── logback.xml
 │
-├── service
-│   ├── interfaces
-│   │   └── ServiceInterface
-│   │
-│   ├── models
-│   │   ├── Book
-│   │   ├── Member
-│   │   └── Loan
-│   │
-│   ├── BookService
-│   ├── MemberService
-│   └── LoanService
-│
-├── util
-│   ├── DbConnectionUtil
-│   ├── InputUtil
-│   └── ValidationUtil
-│
-├── app.Main
-└── app.DebugMain
+└── test
+    └── java
+        └── service
+            ├── BookServiceTest
+            ├── MemberServiceTest
+            └── LoanServiceTest
 ```
+
 
 ### Layer Responsibilities
 
 #### Controller Layer
-- Handles console input/output
-- Displays menus
-- Delegates logic to the service layer
+- Handles console input/output and menu navigation
+- Uses `InputUtil` for safe typed input
+- Uses validators in `util.validators` to validate user-entered fields before calling services
+- Delegates application logic to the service layer
 
 #### Service Layer
-- Contains business rules and validation
-- Converts Entities ↔ Models
+- Contains business rules (e.g., "a book cannot be checked out twice")
 - Coordinates DAO calls
+- Converts Entities ↔ Models (repository layer returns `*Entity`, UI uses service `models`)
+- Can apply additional validation via `ValidationUtil` when rules depend on multiple fields
 
 #### Repository / DAO Layer
 - Executes SQL queries
 - Maps ResultSets to Entity objects
 - Contains no business logic
+
+#### Resources
+- `src/main/resources/database.properties` stores DB connection configuration.
+- `src/main/resources/logback.xml` configures console + rolling file logging (logs written under the project `logs/` directory).
 
 ---
 
