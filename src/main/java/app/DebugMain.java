@@ -3,15 +3,15 @@ package app;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import util.DbConnectionUtil;
-import util.InputUtil;
 import repository.DbSetup;
 import repository.DAO.BookDAO;
-import repository.DAO.MemberDAO;
 import repository.DAO.LoanDAO;
+import repository.DAO.MemberDAO;
 import repository.entities.BookEntity;
-import repository.entities.MemberEntity;
 import repository.entities.LoanEntity;
+import repository.entities.MemberEntity;
+import util.DbConnectionUtil;
+import util.InputUtil;
 
 import java.time.LocalDate;
 
@@ -63,87 +63,81 @@ public class DebugMain {
         log.info("============================================================");
 
         System.out.println("Program started!");
-        log.info("DebugMain started. Prompting user for whether to run debugger tests.");
-
-        String input;
+        log.info("DebugMain started. Prompting user for debug/reset options.");
 
         // ---------------------------------------------------------
-        // Prompt 1: Run debugger tests?
+        // Menu / Option Tree
         // ---------------------------------------------------------
-        while (true) {
-            input = InputUtil.readString(
-                    "Do you want to run the debugger tests? (Y = Yes, N = No): "
-            ).trim().toUpperCase();
+        boolean runFullDebugger = promptYesNo(
+                "Do you want to run the FULL debugger? (Y = Yes, N = No): "
+        );
 
-            log.debug("User input for 'run debugger tests': '{}'", input);
+        if (runFullDebugger) {
+            boolean confirmFull = promptYesNo(
+                    "Are you sure? This will RESET ALL database data. (Y = Yes, N = No): "
+            );
 
-            if (input.equals("Y") || input.equals("N")) {
-                break;
+            if (!confirmFull) {
+                log.info("User declined DB reset confirmation for full debugger. Exiting.");
+                printExitBanner();
+                return;
             }
 
-            System.out.println("Invalid input. Please enter Y or N.");
-            log.warn("Invalid input received for debugger tests prompt: '{}'", input);
-        }
+            log.info("User confirmed full debugger run (includes DB reset).");
+        } else {
+            boolean resetOnly = promptYesNo(
+                    "Do you want to RESET the database ONLY? (Y = Yes, N = No): "
+            );
 
-        // ---------------------------------------------------------
-        // Prompt 2: Confirmation if Y
-        // ---------------------------------------------------------
-        if (input.equals("Y")) {
-            while (true) {
-                input = InputUtil.readString(
-                        "Are you sure? This will RESET ALL database data. (Y = Yes, N = No): "
-                ).trim().toUpperCase();
+            if (!resetOnly) {
+                log.info("User chose not to run full debugger and not to reset DB. Exiting.");
+                printExitBanner();
+                return;
+            }
 
-                log.debug("User input for 'confirm DB reset': '{}'", input);
+            boolean confirmResetOnly = promptYesNo(
+                    "Are you sure? This will RESET ALL database data. (Y = Yes, N = No): "
+            );
 
-                if (input.equals("Y") || input.equals("N")) {
-                    break;
+            if (!confirmResetOnly) {
+                log.info("User declined DB reset-only confirmation. Exiting.");
+                printExitBanner();
+                return;
+            }
+
+            // Reset-only path: do the reset and exit.
+            log.info("User confirmed DB reset-only workflow.");
+            if (openConnectionOrExit()) {
+                if (resetDatabaseOrExit()) {
+                    System.out.println("Database reset complete.");
+                    log.info("DB reset-only workflow completed successfully.");
                 }
-
-                System.out.println("Invalid input. Please enter Y or N.");
-                log.warn("Invalid input received for DB reset confirmation: '{}'", input);
+                closeResources();
             }
-        }
 
-        boolean debug = input.equals("Y");
-        log.info("Debugger tests selected: {}", debug);
-
-        if (!debug) {
-            log.info("User chose not to run debugger tests. Exiting DebugMain session.");
             printExitBanner();
             return;
         }
 
-        log.info("User confirmed debugger tests. Beginning DB + DAO test workflow.");
+        // =========================================================
+        // FULL DEBUGGER PATH (includes DB reset + CRUD smoke tests)
+        // =========================================================
 
         // =========================================================
         // 1. Open DB connection
         // =========================================================
-        try {
-            log.info("Opening DB connection...");
-            DbConnectionUtil.getConnection();
-            System.out.println("DB connection established!");
-            log.info("DB connection established successfully.");
-        } catch (Exception e) {
-            System.out.println("DB connection failed!");
-            log.error("DB connection failed. Aborting debug session.", e);
-            log.info("============================================================\n");
-            return; // can't continue without DB
+        if (!openConnectionOrExit()) {
+            printExitBanner();
+            return;
         }
 
         // =========================================================
         // 1b. Drop + recreate + seed tables
         // =========================================================
-        try {
-            log.info("Resetting database schema via DbSetup.run() (drop/recreate/seed)...");
-            DbSetup.run();
-            System.out.println("DB tables dropped/recreated and dummy data inserted!");
-            log.info("DbSetup completed successfully.");
-        } catch (Exception e) {
-            System.out.println("DbSetup failed!");
-            log.error("DbSetup failed. Aborting debug session.", e);
-            log.info("============================================================\n");
-            return; // stop if schema reset fails
+        if (!resetDatabaseOrExit()) {
+            closeResources();
+            printExitBanner();
+            return;
         }
 
         // =========================================================
@@ -151,11 +145,11 @@ public class DebugMain {
         // =========================================================
         log.info("Testing InputUtil functions (readInt, readString).");
 
-        int num = InputUtil.readInt("Please input an integer:");
+        int num = InputUtil.readInt("Please input an integer: ");
         System.out.println("User input: " + num);
         log.info("User entered integer: {}", num);
 
-        input = InputUtil.readString("Please input a string:");
+        String input = InputUtil.readString("Please input a string: ");
         System.out.println("User input: " + input);
         log.info("User entered string: '{}'", input);
 
@@ -184,7 +178,8 @@ public class DebugMain {
             log.info("Book saved successfully (id={}).", book.getId());
         } catch (Exception e) {
             log.error("Failed to save BookEntity. Aborting remaining debug steps.", e);
-            log.info("============================================================\n");
+            closeResources();
+            printExitBanner();
             return;
         }
 
@@ -212,7 +207,8 @@ public class DebugMain {
             log.info("Member saved successfully (id={}).", member.getId());
         } catch (Exception e) {
             log.error("Failed to save MemberEntity. Aborting remaining debug steps.", e);
-            log.info("============================================================\n");
+            closeResources();
+            printExitBanner();
             return;
         }
 
@@ -243,7 +239,8 @@ public class DebugMain {
             log.info("Loan saved successfully (id={}).", loan.getId());
         } catch (Exception e) {
             log.error("Failed to save LoanEntity. Aborting remaining debug steps.", e);
-            log.info("============================================================\n");
+            closeResources();
+            printExitBanner();
             return;
         }
 
@@ -260,11 +257,7 @@ public class DebugMain {
         // =========================================================
         try {
             log.info("Deleting loan (id={}).", loan.getId());
-
-            // NOTE: BaseDAO.deleteById takes a long. This cast is unnecessary and can truncate.
-            // Prefer: loanDAO.deleteById(loan.getId());
-            loanDAO.deleteById((int) loan.getId());
-
+            loanDAO.deleteById(loan.getId());
             System.out.println("\nDeleted loan with id = " + loan.getId());
             log.info("Loan deleted successfully (id={}).", loan.getId());
         } catch (Exception e) {
@@ -284,10 +277,7 @@ public class DebugMain {
         // =========================================================
         try {
             log.info("Deleting member (id={}).", member.getId());
-
-            // NOTE: BaseDAO.deleteById takes a long. Prefer: memberDAO.deleteById(member.getId());
-            memberDAO.deleteById((int) member.getId());
-
+            memberDAO.deleteById(member.getId());
             System.out.println("\nDeleted member with id = " + member.getId());
             log.info("Member deleted successfully (id={}).", member.getId());
         } catch (Exception e) {
@@ -307,10 +297,7 @@ public class DebugMain {
         // =========================================================
         try {
             log.info("Deleting book (id={}).", book.getId());
-
-            // NOTE: BaseDAO.deleteById takes a long. Prefer: bookDAO.deleteById(book.getId());
-            bookDAO.deleteById((int) book.getId());
-
+            bookDAO.deleteById(book.getId());
             System.out.println("\nDeleted book with id = " + book.getId());
             log.info("Book deleted successfully (id={}).", book.getId());
         } catch (Exception e) {
@@ -326,7 +313,86 @@ public class DebugMain {
         }
 
         // =========================================================
-        // 9. Close Scanner
+        // 9-10. Close resources
+        // =========================================================
+        closeResources();
+
+        // ---------------------------------------------------------
+        // Session banner close
+        // ---------------------------------------------------------
+        printExitBanner();
+    }
+
+    /**
+     * Helper function that clears/resets the database by dropping/recreating
+     * tables and reseeding dummy data.
+     *
+     * <p><strong>WARNING:</strong> This is destructive. It calls {@link DbSetup#run()}.</p>
+     *
+     * @return true if reset succeeds; false otherwise
+     */
+    private static boolean resetDatabaseOrExit() {
+        try {
+            log.info("Resetting database schema via DbSetup.run() (drop/recreate/seed)...");
+            DbSetup.run();
+            System.out.println("DB tables dropped/recreated and dummy data inserted!");
+            log.info("DbSetup completed successfully.");
+            return true;
+        } catch (Exception e) {
+            System.out.println("DbSetup failed!");
+            log.error("DbSetup failed. Aborting debug session.", e);
+            log.info("============================================================\n");
+            return false;
+        }
+    }
+
+    /**
+     * Opens a database connection for the debug session.
+     *
+     * @return true if the connection succeeds; false otherwise
+     */
+    private static boolean openConnectionOrExit() {
+        try {
+            log.info("Opening DB connection...");
+            DbConnectionUtil.getConnection();
+            System.out.println("DB connection established!");
+            log.info("DB connection established successfully.");
+            return true;
+        } catch (Exception e) {
+            System.out.println("DB connection failed!");
+            log.error("DB connection failed. Aborting debug session.", e);
+            log.info("============================================================\n");
+            return false;
+        }
+    }
+
+    /**
+     * Prompts the user for a Y/N response and loops until a valid choice is entered.
+     *
+     * @param prompt prompt text to display
+     * @return true for Y, false for N
+     */
+    private static boolean promptYesNo(String prompt) {
+        while (true) {
+            String input = InputUtil.readString(prompt).trim().toUpperCase();
+            log.debug("User input for yes/no prompt: '{}'", input);
+
+            if ("Y".equals(input)) return true;
+            if ("N".equals(input)) return false;
+
+            System.out.println("Invalid input. Please enter Y or N.");
+            log.warn("Invalid input received for yes/no prompt: '{}'", input);
+        }
+    }
+
+    /**
+     * Closes the InputUtil scanner and DB connection.
+     *
+     * <p>Each close attempt is isolated so one failure does not prevent the other.</p>
+     */
+    private static void closeResources() {
+        // =========================================================
+        // Close Scanner
         // =========================================================
         try {
             log.info("Closing InputUtil scanner...");
@@ -339,7 +405,7 @@ public class DebugMain {
         }
 
         // =========================================================
-        // 10. Close DB Connection
+        // Close DB Connection
         // =========================================================
         try {
             log.info("Closing DB connection...");
@@ -350,11 +416,6 @@ public class DebugMain {
             System.out.println("DB connection close failed!");
             log.error("DB connection close failed.", e);
         }
-
-        // ---------------------------------------------------------
-        // Session banner close
-        // ---------------------------------------------------------
-        printExitBanner();
     }
 
     /**
