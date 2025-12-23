@@ -8,6 +8,13 @@ import java.util.regex.Pattern;
  * - author: NOT NULL (and non-blank)
  * - isbn: nullable, but if present must match ^[0-9Xx-]{10,20}$
  * - publication_year: nullable, but if present must be between 1400 and 3000 (inclusive)
+ *
+ * Also includes small helpers for controller flows:
+ * - requirePositiveId(...) for ID validation
+ * - normalizeUpdatePublicationYear(...) for the update sentinel rules:
+ *     -1 = keep current
+ *      0 = clear (NULL)
+ *    > 0 = set to year (validated)
  */
 public final class BookValidator {
 
@@ -18,13 +25,29 @@ public final class BookValidator {
     // Matches the SQL CHECK constraint: '^[0-9Xx-]{10,20}$'
     private static final Pattern ISBN_PATTERN = Pattern.compile("^[0-9Xx-]{10,20}$");
 
+    // -------------------------------------------------------------------------
+    // IDs
+    // -------------------------------------------------------------------------
+
+    /**
+     * Ensures an ID is positive (> 0).
+     */
+    public static long requirePositiveId(long id, String fieldName) {
+        if (id <= 0) {
+            throw new IllegalArgumentException(fieldName + " must be a positive number.");
+        }
+        return id;
+    }
+
+    // -------------------------------------------------------------------------
+    // Required text fields
+    // -------------------------------------------------------------------------
+
     /**
      * Ensures title is not null/blank and returns a trimmed version.
      */
     public static String requireValidTitle(String title) {
         String t = normalizeRequiredText(title, "title");
-        // Keep it simple: DB uses VARCHAR(255) NOT NULL
-        // If you want to enforce the length at the controller level:
         if (t.length() > 255) {
             throw new IllegalArgumentException("Title must be 255 characters or fewer.");
         }
@@ -41,6 +64,10 @@ public final class BookValidator {
         }
         return a;
     }
+
+    // -------------------------------------------------------------------------
+    // ISBN (optional)
+    // -------------------------------------------------------------------------
 
     /**
      * Normalizes an optional ISBN input:
@@ -74,9 +101,13 @@ public final class BookValidator {
         return trimmed;
     }
 
+    // -------------------------------------------------------------------------
+    // Publication year (optional)
+    // -------------------------------------------------------------------------
+
     /**
      * Normalizes an optional publication year input:
-     * - year <= 0 -> null (matches your controller behavior: 0 means not applicable)
+     * - year <= 0 -> null (matches your CREATE behavior: 0 means not applicable)
      * - otherwise returns year
      */
     public static Integer normalizeOptionalPublicationYear(int yearInput) {
@@ -96,6 +127,31 @@ public final class BookValidator {
 
         return year;
     }
+
+    /**
+     * Normalizes UPDATE flow input for publication year using controller sentinel rules:
+     *  -1 => keep current
+     *   0 => clear (NULL)
+     *  >0 => set to that year (validated separately)
+     *
+     * @param input        raw int from InputUtil
+     * @param currentValue current publication year (may be null)
+     * @return normalized year value (may be null), or currentValue if -1
+     */
+    public static Integer normalizeUpdatePublicationYear(int input, Integer currentValue) {
+        if (input == -1) return currentValue;
+        if (input == 0) return null;
+
+        if (input < -1) {
+            throw new IllegalArgumentException("Use -1 to keep current, 0 to clear, or enter a valid year.");
+        }
+
+        return input; // validateOptionalPublicationYear(...) will enforce range
+    }
+
+    // -------------------------------------------------------------------------
+    // Convenience method (optional)
+    // -------------------------------------------------------------------------
 
     /**
      * Convenience method for "create" flows: validates and returns canonical values.

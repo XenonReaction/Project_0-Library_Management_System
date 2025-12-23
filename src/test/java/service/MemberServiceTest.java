@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-public class MemberServiceTest {
+class MemberServiceTest {
 
     @Mock
     private MemberDAO memberDAO;
@@ -34,7 +34,6 @@ public class MemberServiceTest {
     private Member testMemberModel;
     private MemberEntity savedMemberEntity;
 
-    // ---- logback capture ----
     private ListAppender<ILoggingEvent> listAppender;
 
     @BeforeEach
@@ -43,18 +42,20 @@ public class MemberServiceTest {
         savedMemberEntity = new MemberEntity(25L, "Alice Johnson", "alice@example.com", "555-1212");
 
         Logger logger = (Logger) LoggerFactory.getLogger(MemberService.class);
+        logger.setLevel(Level.DEBUG);
+
         listAppender = new ListAppender<>();
         listAppender.start();
 
-        logger.detachAppender(listAppender);
+        logger.detachAndStopAllAppenders();
         logger.addAppender(listAppender);
     }
 
     private boolean hasLog(Level level, String containsText) {
         return listAppender.list.stream().anyMatch(e ->
-                e.getLevel().equals(level) &&
-                        e.getFormattedMessage() != null &&
-                        e.getFormattedMessage().contains(containsText)
+                e.getLevel().equals(level)
+                        && e.getFormattedMessage() != null
+                        && e.getFormattedMessage().contains(containsText)
         );
     }
 
@@ -63,7 +64,8 @@ public class MemberServiceTest {
     // =========================================================
 
     @Test
-    void create_Success_ReturnsNewId_AndSetsModelId() {
+    void create_Success_ReturnsNewId_SetsModelId_AndCallsDaoSave() {
+        when(memberDAO.isEmailAvailable("alice@example.com")).thenReturn(true);
         when(memberDAO.save(any(MemberEntity.class))).thenReturn(savedMemberEntity);
 
         Long newId = memberService.create(testMemberModel);
@@ -71,18 +73,26 @@ public class MemberServiceTest {
         assertEquals(25L, newId);
         assertEquals(25L, testMemberModel.getId());
 
-        verify(memberDAO, times(1)).save(any(MemberEntity.class));
-        assertTrue(hasLog(Level.INFO, "Member created successfully"));
+        ArgumentCaptor<MemberEntity> captor = ArgumentCaptor.forClass(MemberEntity.class);
+        verify(memberDAO, times(1)).save(captor.capture());
+
+        MemberEntity sent = captor.getValue();
+        assertEquals("Alice Johnson", sent.getName());
+        assertEquals("alice@example.com", sent.getEmail());
+        assertEquals("555-1212", sent.getPhone());
+
+        verify(memberDAO, times(1)).isEmailAvailable("alice@example.com");
+        assertTrue(hasLog(Level.INFO, "Member created successfully with id=25"));
     }
 
     @Test
     void create_NullModel_Throws_AndDoesNotCallDao() {
         assertThrows(IllegalArgumentException.class, () -> memberService.create(null));
-        verify(memberDAO, never()).save(any());
+        verifyNoInteractions(memberDAO);
     }
 
     @Test
-    void create_BlankOptionalEmail_NormalizesToNull_BeforeSaving() {
+    void create_BlankOptionalFields_NormalizesToNull_AndSkipsEmailAvailabilityCheck() {
         testMemberModel.setEmail("   ");
         testMemberModel.setPhone("  ");
 
@@ -97,20 +107,36 @@ public class MemberServiceTest {
         assertNull(testMemberModel.getPhone());
 
         ArgumentCaptor<MemberEntity> captor = ArgumentCaptor.forClass(MemberEntity.class);
-        verify(memberDAO).save(captor.capture());
+        verify(memberDAO, times(1)).save(captor.capture());
 
         MemberEntity sent = captor.getValue();
         assertEquals("Alice Johnson", sent.getName());
         assertNull(sent.getEmail());
         assertNull(sent.getPhone());
+
+        verify(memberDAO, never()).isEmailAvailable(anyString());
     }
 
     @Test
-    void create_BlankName_ThrowsIllegalArgumentException_AndDoesNotCallDao() {
+    void create_EmailNotAvailable_Throws_AndDoesNotSave() {
+        when(memberDAO.isEmailAvailable("alice@example.com")).thenReturn(false);
+
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> memberService.create(testMemberModel));
+
+        assertTrue(ex.getMessage().toLowerCase().contains("email"));
+        verify(memberDAO, times(1)).isEmailAvailable("alice@example.com");
+        verify(memberDAO, never()).save(any());
+
+        assertTrue(hasLog(Level.INFO, "create blocked: email already exists"));
+    }
+
+    @Test
+    void create_BlankName_Throws_AndDoesNotCallDao() {
         testMemberModel.setName(" ");
 
         assertThrows(IllegalArgumentException.class, () -> memberService.create(testMemberModel));
-        verify(memberDAO, never()).save(any());
+        verifyNoInteractions(memberDAO);
     }
 
     // =========================================================
@@ -139,7 +165,7 @@ public class MemberServiceTest {
     }
 
     @Test
-    void getById_Found_ReturnsMappedMember() {
+    void getById_Found_ReturnsMappedMember_AndLogsDebug() {
         when(memberDAO.findById(25L)).thenReturn(Optional.of(savedMemberEntity));
 
         Optional<Member> result = memberService.getById(25L);
@@ -147,9 +173,34 @@ public class MemberServiceTest {
         assertTrue(result.isPresent());
         assertEquals(25L, result.get().getId());
         assertEquals("Alice Johnson", result.get().getName());
+        assertEquals("alice@example.com", result.get().getEmail());
+        assertEquals("555-1212", result.get().getPhone());
 
         verify(memberDAO, times(1)).findById(25L);
         assertTrue(hasLog(Level.DEBUG, "Member found with id=25"));
+    }
+
+    // =========================================================
+    // getAll()
+    // =========================================================
+
+    @Test
+    void getAll_ReturnsMappedMembers_AndCallsDaoFindAll() {
+        when(memberDAO.findAll()).thenReturn(List.of(
+                new MemberEntity(1L, "A", null, null),
+                new MemberEntity(2L, "B", "b@example.com", "222")
+        ));
+
+        List<Member> results = memberService.getAll();
+
+        assertEquals(2, results.size());
+        assertEquals(1L, results.get(0).getId());
+        assertEquals("A", results.get(0).getName());
+        assertEquals(2L, results.get(1).getId());
+        assertEquals("B", results.get(1).getName());
+
+        verify(memberDAO, times(1)).findAll();
+        assertTrue(hasLog(Level.DEBUG, "getAll returning 2 members."));
     }
 
     // =========================================================
@@ -157,22 +208,23 @@ public class MemberServiceTest {
     // =========================================================
 
     @Test
-    void update_InvalidId_Throws_AndDoesNotCallDao_AndLogsWarn() {
+    void update_InvalidId_Throws_DoesNotCallDao_AndLogsWarn() {
         Member updated = new Member("Updated Name", "u@example.com", null);
 
         assertThrows(IllegalArgumentException.class, () -> memberService.update(null, updated));
         assertThrows(IllegalArgumentException.class, () -> memberService.update(0L, updated));
         assertThrows(IllegalArgumentException.class, () -> memberService.update(-5L, updated));
 
+        verify(memberDAO, never()).existsById(anyLong());
         verify(memberDAO, never()).findById(anyLong());
         verify(memberDAO, never()).update(any());
+
         assertTrue(hasLog(Level.WARN, "update called with invalid id="));
     }
 
     @Test
     void update_NullModel_Throws_AndDoesNotCallDao() {
         assertThrows(IllegalArgumentException.class, () -> memberService.update(25L, null));
-        verify(memberDAO, never()).findById(anyLong());
         verify(memberDAO, never()).update(any());
     }
 
@@ -181,26 +233,50 @@ public class MemberServiceTest {
         Member updated = new Member("   ", "u@example.com", "111");
 
         assertThrows(IllegalArgumentException.class, () -> memberService.update(25L, updated));
-        verify(memberDAO, never()).findById(anyLong());
-        verify(memberDAO, never()).update(any());
+        verifyNoInteractions(memberDAO);
     }
 
     @Test
-    void update_NotFound_ThrowsIllegalArgumentException_AndLogsInfo() {
-        when(memberDAO.findById(999L)).thenReturn(Optional.empty());
+    void update_NotFound_Throws_AndLogsInfo() {
+        when(memberDAO.existsById(999L)).thenReturn(false);
+
         Member updated = new Member("Updated Name", "u@example.com", null);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> memberService.update(999L, updated));
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> memberService.update(999L, updated));
         assertTrue(ex.getMessage().contains("No member found with id=999"));
 
-        verify(memberDAO, times(1)).findById(999L);
+        verify(memberDAO, times(1)).existsById(999L);
+        verify(memberDAO, never()).findById(anyLong());
         verify(memberDAO, never()).update(any());
+
         assertTrue(hasLog(Level.INFO, "update failed: no member found with id=999"));
     }
 
     @Test
-    void update_Success_CallsDaoUpdate_AndReturnsUpdatedModel() {
+    void update_EmailNotAvailableForUpdate_Throws_AndDoesNotUpdate() {
+        when(memberDAO.existsById(25L)).thenReturn(true);
+        when(memberDAO.isEmailAvailableForUpdate(25L, "new@example.com")).thenReturn(false);
+
+        Member updated = new Member("New Name", "new@example.com", "222");
+
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> memberService.update(25L, updated));
+
+        assertTrue(ex.getMessage().toLowerCase().contains("email"));
+        verify(memberDAO, times(1)).existsById(25L);
+        verify(memberDAO, times(1)).isEmailAvailableForUpdate(25L, "new@example.com");
+        verify(memberDAO, never()).findById(anyLong());
+        verify(memberDAO, never()).update(any());
+
+        assertTrue(hasLog(Level.INFO, "update blocked: email already exists for another member"));
+    }
+
+    @Test
+    void update_Success_UpdatesEntity_CallsDaoUpdate_AndReturnsModel() {
+        when(memberDAO.existsById(25L)).thenReturn(true);
+        when(memberDAO.isEmailAvailableForUpdate(25L, "new@example.com")).thenReturn(true);
+
         MemberEntity existing = new MemberEntity(25L, "Old Name", "old@example.com", "111");
         when(memberDAO.findById(25L)).thenReturn(Optional.of(existing));
 
@@ -213,14 +289,22 @@ public class MemberServiceTest {
         assertEquals("new@example.com", result.getEmail());
         assertEquals("222", result.getPhone());
 
+        verify(memberDAO, times(1)).existsById(25L);
+        verify(memberDAO, times(1)).isEmailAvailableForUpdate(25L, "new@example.com");
         verify(memberDAO, times(1)).findById(25L);
         verify(memberDAO, times(1)).update(existing);
+
+        assertEquals("New Name", existing.getName());
+        assertEquals("new@example.com", existing.getEmail());
+        assertEquals("222", existing.getPhone());
 
         assertTrue(hasLog(Level.INFO, "Member updated successfully for id=25"));
     }
 
     @Test
-    void update_BlankOptionalFields_NormalizesToNull_BeforeSaving() {
+    void update_BlankOptionalFields_NormalizesToNull_AndSkipsEmailAvailabilityForUpdate() {
+        when(memberDAO.existsById(25L)).thenReturn(true);
+
         MemberEntity existing = new MemberEntity(25L, "Old Name", "old@example.com", "111");
         when(memberDAO.findById(25L)).thenReturn(Optional.of(existing));
 
@@ -233,10 +317,11 @@ public class MemberServiceTest {
         assertNull(result.getEmail());
         assertNull(result.getPhone());
 
+        verify(memberDAO, times(1)).existsById(25L);
+        verify(memberDAO, never()).isEmailAvailableForUpdate(eq(25L), anyString());
         verify(memberDAO, times(1)).findById(25L);
         verify(memberDAO, times(1)).update(existing);
 
-        // Ensure entity updated with nulls
         assertNull(existing.getEmail());
         assertNull(existing.getPhone());
     }
@@ -246,38 +331,61 @@ public class MemberServiceTest {
     // =========================================================
 
     @Test
-    void delete_InvalidId_ReturnsFalse_AndDoesNotCallDao_AndLogsWarn() {
+    void delete_InvalidId_ReturnsFalse_DoesNotCallDao_AndLogsWarn() {
         assertFalse(memberService.delete(null));
         assertFalse(memberService.delete(0L));
         assertFalse(memberService.delete(-1L));
 
-        verify(memberDAO, never()).findById(anyLong());
+        verify(memberDAO, never()).existsById(anyLong());
+        verify(memberDAO, never()).hasAnyLoans(anyLong());
         verify(memberDAO, never()).deleteById(anyLong());
 
         assertTrue(hasLog(Level.WARN, "delete called with invalid id="));
     }
 
     @Test
-    void delete_NotFound_ReturnsFalse_AndDoesNotDelete_AndLogsInfo() {
-        when(memberDAO.findById(999L)).thenReturn(Optional.empty());
+    void delete_NotFound_ReturnsFalse_CallsExistsOnly_AndLogsInfo() {
+        when(memberDAO.existsById(999L)).thenReturn(false);
 
         boolean result = memberService.delete(999L);
 
         assertFalse(result);
-        verify(memberDAO, times(1)).findById(999L);
+
+        verify(memberDAO, times(1)).existsById(999L);
+        verify(memberDAO, never()).hasAnyLoans(anyLong());
         verify(memberDAO, never()).deleteById(anyLong());
 
         assertTrue(hasLog(Level.INFO, "delete skipped: no member found with id=999"));
     }
 
     @Test
-    void delete_Found_DeletesAndReturnsTrue() {
-        when(memberDAO.findById(25L)).thenReturn(Optional.of(savedMemberEntity));
+    void delete_BlockedByLoanHistory_Throws_AndDoesNotDelete() {
+        when(memberDAO.existsById(25L)).thenReturn(true);
+        when(memberDAO.hasAnyLoans(25L)).thenReturn(true);
+
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> memberService.delete(25L));
+
+        assertTrue(ex.getMessage().contains("Cannot delete member id=25"));
+
+        verify(memberDAO, times(1)).existsById(25L);
+        verify(memberDAO, times(1)).hasAnyLoans(25L);
+        verify(memberDAO, never()).deleteById(anyLong());
+
+        assertTrue(hasLog(Level.INFO, "delete blocked: member id=25 has loans"));
+    }
+
+    @Test
+    void delete_Success_DeletesAndReturnsTrue_AndLogsInfo() {
+        when(memberDAO.existsById(25L)).thenReturn(true);
+        when(memberDAO.hasAnyLoans(25L)).thenReturn(false);
 
         boolean result = memberService.delete(25L);
 
         assertTrue(result);
-        verify(memberDAO, times(1)).findById(25L);
+
+        verify(memberDAO, times(1)).existsById(25L);
+        verify(memberDAO, times(1)).hasAnyLoans(25L);
         verify(memberDAO, times(1)).deleteById(25L);
 
         assertTrue(hasLog(Level.INFO, "Member deleted successfully for id=25"));

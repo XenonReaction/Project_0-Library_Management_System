@@ -45,10 +45,6 @@ public final class LoanValidator {
     // Dates (checkout_date, due_date, return_date)
     // -------------------------------------------------------------------------
 
-    /**
-     * checkout_date is NOT NULL in DB. If your controller always uses LocalDate.now(),
-     * this still provides a consistent guard for tests / future changes.
-     */
     public static LocalDate requireValidCheckoutDate(LocalDate checkoutDate) {
         if (checkoutDate == null) {
             throw new IllegalArgumentException("Checkout date cannot be null.");
@@ -56,9 +52,6 @@ public final class LoanValidator {
         return checkoutDate;
     }
 
-    /**
-     * due_date is NOT NULL and must be >= checkout_date.
-     */
     public static LocalDate requireValidDueDate(LocalDate dueDate, LocalDate checkoutDate) {
         if (dueDate == null) {
             throw new IllegalArgumentException("Due date cannot be null.");
@@ -71,9 +64,6 @@ public final class LoanValidator {
         return dueDate;
     }
 
-    /**
-     * return_date is nullable; if present must be >= checkout_date.
-     */
     public static LocalDate validateOptionalReturnDate(LocalDate returnDate, LocalDate checkoutDate) {
         if (returnDate == null) {
             return null;
@@ -86,16 +76,38 @@ public final class LoanValidator {
         return returnDate;
     }
 
+    /**
+     * Optional business-rule guard: reject dates in the future.
+     * (Not required by DB constraints.)
+     */
+    public static LocalDate requireNotFutureDate(LocalDate date, String fieldName) {
+        if (date == null) {
+            throw new IllegalArgumentException(fieldName + " cannot be null.");
+        }
+        if (date.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException(fieldName + " cannot be in the future.");
+        }
+        return date;
+    }
+
     // -------------------------------------------------------------------------
     // Optional convenience helpers (useful for inline prompts)
     // -------------------------------------------------------------------------
 
-    /**
-     * Some flows may allow the user to specify a custom checkout date.
-     * If the caller passes null, default to today.
-     */
     public static LocalDate normalizeCheckoutDate(LocalDate checkoutDate) {
         return (checkoutDate == null) ? LocalDate.now() : checkoutDate;
     }
-}
 
+    /**
+     * Optional: normalize loan length days for checkout flows.
+     * - <= 0 => defaultDays
+     * - > maxDays => reject (helps prevent fat-finger values)
+     */
+    public static int normalizeLoanLengthDays(int days, int defaultDays, int maxDays) {
+        if (days <= 0) return defaultDays;
+        if (days > maxDays) {
+            throw new IllegalArgumentException("Loan length is too large (max " + maxDays + " days).");
+        }
+        return days;
+    }
+}

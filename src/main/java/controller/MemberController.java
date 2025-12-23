@@ -124,12 +124,12 @@ public class MemberController {
         System.out.println("=== ADD MEMBER ===");
 
         try {
-            // Inline validation per field (BookController style)
             String name = promptRequiredNameCreate();
             String email = promptOptionalEmailCreate();
             String phone = promptOptionalPhoneCreate();
 
-            log.debug("Add Member validated input - name={}, email={}, phone={}", name, email, phone);
+            // PII-safe: don't log email/phone
+            log.debug("Add Member validated input - name={}", name);
 
             Member member = new Member(name, email, phone);
             Long id = memberService.create(member);
@@ -137,6 +137,9 @@ public class MemberController {
             log.info("Member created successfully with id={}", id);
             System.out.println("Saved member with id=" + id);
 
+        } catch (IllegalArgumentException ex) {
+            log.warn("Add Member rejected: {}", ex.getMessage());
+            System.out.println(ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Unexpected error while adding member.", ex);
             System.out.println("Error adding member.");
@@ -147,7 +150,7 @@ public class MemberController {
         System.out.println();
         System.out.println("=== FIND MEMBER ===");
 
-        long id = InputUtil.readInt("Member ID: ");
+        long id = promptValidMemberId("Member ID: ");
         log.debug("Find Member requested for id={}", id);
 
         try {
@@ -171,7 +174,7 @@ public class MemberController {
         System.out.println();
         System.out.println("=== UPDATE MEMBER ===");
 
-        long id = InputUtil.readInt("Member ID to update: ");
+        long id = promptValidMemberId("Member ID to update: ");
         log.debug("Update Member requested for id={}", id);
 
         try {
@@ -189,7 +192,6 @@ public class MemberController {
             System.out.println("Use '-' to keep the current value.");
             System.out.println("For Email/Phone: '-' keeps current, 'NONE' clears it (NULL), otherwise enter a value.");
 
-            // Inline validation per field (BookController style)
             String name = promptNameUpdate(existing.getName());
             String email = promptEmailUpdate(existing.getEmail());
             String phone = promptPhoneUpdate(existing.getPhone());
@@ -203,6 +205,9 @@ public class MemberController {
             log.info("Member updated successfully for id={}", id);
             System.out.println("Updated: " + result);
 
+        } catch (IllegalArgumentException ex) {
+            log.warn("Update Member rejected for id={}: {}", id, ex.getMessage());
+            System.out.println(ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Unexpected error while updating member id={}", id, ex);
             System.out.println("Error updating member.");
@@ -213,7 +218,7 @@ public class MemberController {
         System.out.println();
         System.out.println("=== DELETE MEMBER ===");
 
-        long id = InputUtil.readInt("Member ID to delete: ");
+        long id = promptValidMemberId("Member ID to delete: ");
         log.debug("Delete Member requested for id={}", id);
 
         try {
@@ -225,9 +230,28 @@ public class MemberController {
                 log.info("No member found to delete with id={}", id);
                 System.out.println("No member found with id=" + id + " (nothing deleted).");
             }
+        } catch (IllegalArgumentException ex) {
+            log.warn("Delete Member rejected for id={}: {}", id, ex.getMessage());
+            System.out.println(ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Error deleting member with id={}", id, ex);
             System.out.println("Error deleting member.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Inline prompt + validation helpers
+    // -------------------------------------------------------------------------
+
+    private long promptValidMemberId(String prompt) {
+        while (true) {
+            long input = InputUtil.readInt(prompt);
+            try {
+                return MemberValidator.requireValidMemberId(input);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid member id input: {}", ex.getMessage());
+                System.out.println("Invalid Member ID: " + ex.getMessage());
+            }
         }
     }
 
@@ -274,16 +298,14 @@ public class MemberController {
     }
 
     // -------------------------------------------------------------------------
-    // Inline prompt + validation helpers (UPDATE)
+    // Inline prompt + validation helpers (UPDATE) using MemberValidator update helpers
     // -------------------------------------------------------------------------
 
     private String promptNameUpdate(String currentValue) {
         while (true) {
             String input = InputUtil.readString("New name: ");
-            if ("-".equals(input)) return currentValue;
-
             try {
-                return MemberValidator.requireValidName(input);
+                return MemberValidator.resolveUpdatedName(input, currentValue);
             } catch (IllegalArgumentException ex) {
                 log.warn("Invalid name input (update): {}", ex.getMessage());
                 System.out.println("Invalid name: " + ex.getMessage());
@@ -294,11 +316,8 @@ public class MemberController {
     private String promptEmailUpdate(String currentValue) {
         while (true) {
             String input = InputUtil.readString("New email (or NONE to clear): ");
-            if ("-".equals(input)) return currentValue;
-
             try {
-                String normalized = MemberValidator.normalizeOptionalEmail(input); // NONE/blank -> null
-                return MemberValidator.validateOptionalEmail(normalized);
+                return MemberValidator.resolveUpdatedEmail(input, currentValue);
             } catch (IllegalArgumentException ex) {
                 log.warn("Invalid email input (update): {}", ex.getMessage());
                 System.out.println("Invalid email: " + ex.getMessage());
@@ -309,11 +328,8 @@ public class MemberController {
     private String promptPhoneUpdate(String currentValue) {
         while (true) {
             String input = InputUtil.readString("New phone (or NONE to clear): ");
-            if ("-".equals(input)) return currentValue;
-
             try {
-                String normalized = MemberValidator.normalizeOptionalPhone(input); // NONE/blank -> null
-                return MemberValidator.validateOptionalPhone(normalized);
+                return MemberValidator.resolveUpdatedPhone(input, currentValue);
             } catch (IllegalArgumentException ex) {
                 log.warn("Invalid phone input (update): {}", ex.getMessage());
                 System.out.println("Invalid phone: " + ex.getMessage());

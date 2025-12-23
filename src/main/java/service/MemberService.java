@@ -45,8 +45,14 @@ public class MemberService implements ServiceInterface<Member, Long> {
         ValidationUtil.requireNonNull(model, "member");
         ValidationUtil.requireNonBlank(model.getName(), "name");
 
-        // Optional fields (leave null if blank)
+        // Optional fields (blank -> null)
         normalizeOptionalFields(model);
+
+        // Pre-check email uniqueness for nicer UX (DB UNIQUE is still source of truth)
+        if (model.getEmail() != null && !memberDAO.isEmailAvailable(model.getEmail())) {
+            log.info("create blocked: email already exists for another member.");
+            throw new IllegalArgumentException("Email is already in use. Please enter a different email (or NONE).");
+        }
 
         MemberEntity entity = toEntityForInsert(model);
         MemberEntity saved = memberDAO.save(entity);
@@ -99,8 +105,25 @@ public class MemberService implements ServiceInterface<Member, Long> {
         ValidationUtil.requireNonBlank(updatedModel.getName(), "name");
         normalizeOptionalFields(updatedModel);
 
+        // Use existsById for a cheaper existence check (optional but clean)
+        if (!memberDAO.existsById(id)) {
+            log.info("update failed: no member found with id={}", id);
+            throw new IllegalArgumentException("No member found with id=" + id);
+        }
+
+        // Email uniqueness check for updates:
+        // - null allowed
+        // - if set, must not belong to some OTHER member
+        if (updatedModel.getEmail() != null &&
+                !memberDAO.isEmailAvailableForUpdate(id, updatedModel.getEmail())) {
+            log.info("update blocked: email already exists for another member (id={}).", id);
+            throw new IllegalArgumentException("Email is already in use by another member. Please enter a different email (or NONE).");
+        }
+
+        // Load entity and apply updates
         MemberEntity existing = memberDAO.findById(id)
                 .orElseThrow(() -> {
+                    // This should be rare since existsById checked already, but keep it safe.
                     log.info("update failed: no member found with id={}", id);
                     return new IllegalArgumentException("No member found with id=" + id);
                 });
@@ -124,10 +147,23 @@ public class MemberService implements ServiceInterface<Member, Long> {
             return false;
         }
 
-        if (memberDAO.findById(id).isEmpty()) {
+        // Existence check (cheaper than findById when you don't need the row)
+        if (!memberDAO.existsById(id)) {
             log.info("delete skipped: no member found with id={}", id);
             return false;
         }
+
+        // Pre-check FK RESTRICT condition for nicer UX:
+        // choose one rule:
+        // - hasAnyLoans blocks delete if member ever had a loan (strict)
+        // - hasActiveLoans blocks delete only if they currently have books checked out (lenient)
+        if (memberDAO.hasAnyLoans(id)) {
+            log.info("delete blocked: member id={} has loans.", id);
+            throw new IllegalArgumentException("Cannot delete member id=" + id + " because they have loan history.");
+        }
+
+        // If you prefer lenient deletion rules, swap the above to:
+        // if (memberDAO.hasActiveLoans(id)) { ... "because they have active loans." }
 
         memberDAO.deleteById(id);
         log.info("Member deleted successfully for id={}", id);

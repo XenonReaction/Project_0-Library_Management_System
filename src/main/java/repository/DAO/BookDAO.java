@@ -191,6 +191,93 @@ public class BookDAO implements BaseDAO<BookEntity> {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Guardrail helpers (existence + loan dependency checks)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Lightweight existence check. Useful to avoid pointless calls and to give
+     * cleaner service/controller messaging.
+     */
+    public boolean existsById(long id) {
+        final String sql = "SELECT 1 FROM books WHERE id = ?;";
+        log.debug("BookDAO.existsById called (id={}).", id);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while checking existence for book id={}.", id, e);
+            throw new RuntimeException("Failed to check existence for book id=" + id, e);
+        }
+    }
+
+    /**
+     * Returns true if the book has any loan rows (active or historical).
+     * Helpful before DELETE because loans.book_id -> books.id uses ON DELETE RESTRICT.
+     */
+    public boolean hasAnyLoans(long bookId) {
+        final String sql = "SELECT 1 FROM loans WHERE book_id = ? LIMIT 1;";
+        log.debug("BookDAO.hasAnyLoans called (bookId={}).", bookId);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while checking loan references for book id={}.", bookId, e);
+            throw new RuntimeException("Failed to check loan references for book id=" + bookId, e);
+        }
+    }
+
+    /**
+     * Returns true if the book currently has an active loan (return_date IS NULL).
+     * This is usually a service-level rule, but the DAO can provide the query helper.
+     */
+    public boolean isCheckedOut(long bookId) {
+        final String sql = """
+            SELECT 1
+            FROM loans
+            WHERE book_id = ?
+              AND return_date IS NULL
+            LIMIT 1;
+            """;
+        log.debug("BookDAO.isCheckedOut called (bookId={}).", bookId);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while checking active loan for book id={}.", bookId, e);
+            throw new RuntimeException("Failed to check active loan for book id=" + bookId, e);
+        }
+    }
+
+    /**
+     * "Safe" delete that returns false if the row didn't exist.
+     * Still throws on SQL errors. FK violations will still throw unless you
+     * pre-check hasAnyLoans(bookId).
+     */
+    public boolean tryDeleteById(long id) {
+        final String sql = "DELETE FROM books WHERE id = ?;";
+        log.debug("BookDAO.tryDeleteById called (id={}).", id);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, id);
+            int rows = ps.executeUpdate();
+            log.debug("BookDAO.tryDeleteById rows affected={}", rows);
+            return rows == 1;
+        } catch (SQLException e) {
+            log.error("SQL error while trying to delete book id={}.", id, e);
+            throw new RuntimeException("Failed to delete book id=" + id, e);
+        }
+    }
+
     // --------------------------------------------------
     // Row mapper
     // --------------------------------------------------

@@ -125,7 +125,6 @@ public class BookController {
         System.out.println("=== ADD BOOK ===");
 
         try {
-            // Inline validation per field
             String title = promptRequiredTitleCreate();
             String author = promptRequiredAuthorCreate();
             String isbn = promptOptionalIsbnCreate();
@@ -150,7 +149,7 @@ public class BookController {
         System.out.println();
         System.out.println("=== FIND BOOK ===");
 
-        long id = InputUtil.readInt("Book ID: ");
+        long id = promptPositiveBookId("Book ID: ");
         log.debug("Find Book requested for id={}", id);
 
         try {
@@ -174,7 +173,7 @@ public class BookController {
         System.out.println();
         System.out.println("=== UPDATE BOOK ===");
 
-        long id = InputUtil.readInt("Book ID to update: ");
+        long id = promptPositiveBookId("Book ID to update: ");
         log.debug("Update Book requested for id={}", id);
 
         try {
@@ -193,7 +192,6 @@ public class BookController {
             System.out.println("For ISBN: '-' keeps current, 'NONE' clears it (NULL), otherwise enter a value.");
             System.out.println("For year: -1 keeps current, 0 clears it (NULL), otherwise enter a year.");
 
-            // Inline validation per field
             String title = promptTitleUpdate(existing.getTitle());
             String author = promptAuthorUpdate(existing.getAuthor());
             String isbn = promptIsbnUpdate(existing.getIsbn());
@@ -209,6 +207,9 @@ public class BookController {
             log.info("Book updated successfully for id={}", id);
             System.out.println("Updated: " + result);
 
+        } catch (IllegalArgumentException ex) {
+            log.warn("Update book rejected: {}", ex.getMessage());
+            System.out.println(ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Unexpected error while updating book id={}", id, ex);
             System.out.println("Error updating book.");
@@ -219,21 +220,48 @@ public class BookController {
         System.out.println();
         System.out.println("=== DELETE BOOK ===");
 
-        long id = InputUtil.readInt("Book ID to delete: ");
+        long id = promptPositiveBookId("Book ID to delete: ");
         log.debug("Delete Book requested: id={}", id);
 
         try {
             boolean deleted = bookService.delete(id);
+
             if (deleted) {
                 log.info("Book deleted successfully with id={}", id);
                 System.out.println("Deleted book id=" + id);
-            } else {
-                log.info("No book found to delete with id={}", id);
-                System.out.println("No book found with id=" + id + " (nothing deleted).");
+                return;
             }
+
+            boolean checkedOut = bookService.isBookCheckedOut(id);
+
+            if (checkedOut) {
+                log.info("Delete blocked: book id={} is currently checked out.", id);
+                System.out.println("Cannot delete book id=" + id + " because it is currently checked out.");
+            } else {
+                log.info("Book not deleted (not found or has loan history) id={}.", id);
+                System.out.println("Could not delete book id=" + id +
+                        ". It may not exist, or it may have related loans.");
+            }
+
         } catch (RuntimeException ex) {
             log.error("Error deleting book with id={}", id, ex);
             System.out.println("Error deleting book.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // ID prompt helper (now uses BookValidator.requirePositiveId)
+    // -------------------------------------------------------------------------
+
+    private long promptPositiveBookId(String prompt) {
+        while (true) {
+            long id = InputUtil.readInt(prompt);
+            try {
+                return BookValidator.requirePositiveId(id, "Book ID");
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid book id input: {}", ex.getMessage());
+                System.out.println(ex.getMessage());
+            }
         }
     }
 
@@ -340,11 +368,10 @@ public class BookController {
 
     private Integer promptPublicationYearUpdate(Integer currentValue) {
         while (true) {
-            int input = InputUtil.readInt("New publication year: ");
-            if (input == -1) return currentValue;
+            int input = InputUtil.readInt("New publication year (-1 keep, 0 clear): ");
 
             try {
-                Integer normalized = BookValidator.normalizeOptionalPublicationYear(input); // 0/<=0 -> null
+                Integer normalized = BookValidator.normalizeUpdatePublicationYear(input, currentValue);
                 return BookValidator.validateOptionalPublicationYear(normalized);
             } catch (IllegalArgumentException ex) {
                 log.warn("Invalid publication year input (update): {}", ex.getMessage());

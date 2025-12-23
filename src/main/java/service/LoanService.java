@@ -15,6 +15,14 @@ import java.util.Optional;
 /**
  * Service layer for Loan CRUD + loan-specific operations (checkout/return/queries).
  * Converts between Loan (service.models) and LoanEntity (repository.entities).
+ *
+ * Notes:
+ * - FK existence checks for books/members ideally belong in BookDAO/MemberDAO.
+ *   This service implements what it can using the updated LoanDAO helpers:
+ *   - prevent double-checkout (book already has active loan)
+ *   - race-safe return (UPDATE ... WHERE return_date IS NULL)
+ *   - optional member active-loan limit (using LoanDAO count)
+ *   - faster existence checks (LoanDAO.existsById)
  */
 public class LoanService implements ServiceInterface<Loan, Long> {
 
@@ -22,8 +30,14 @@ public class LoanService implements ServiceInterface<Loan, Long> {
 
     private final LoanDAO loanDAO;
 
+    /**
+     * Optional policy: maximum active loans per member.
+     * Set to 0 or less to disable.
+     */
+    private final int maxActiveLoansPerMember;
+
     public LoanService() {
-        this.loanDAO = new LoanDAO();
+        this(new LoanDAO(), 0); // 0 = no limit by default
         log.debug("LoanService initialized with default LoanDAO.");
     }
 
@@ -31,12 +45,21 @@ public class LoanService implements ServiceInterface<Loan, Long> {
      * Constructor for testing (inject a mock LoanDAO).
      */
     public LoanService(LoanDAO loanDAO) {
+        this(loanDAO, 0);
+    }
+
+    /**
+     * Constructor with a member-loan policy limit.
+     * @param maxActiveLoansPerMember 0 or less disables the limit
+     */
+    public LoanService(LoanDAO loanDAO, int maxActiveLoansPerMember) {
         if (loanDAO == null) {
             log.error("Attempted to initialize LoanService with null LoanDAO.");
             throw new IllegalArgumentException("loanDAO cannot be null.");
         }
         this.loanDAO = loanDAO;
-        log.debug("LoanService initialized with injected LoanDAO.");
+        this.maxActiveLoansPerMember = maxActiveLoansPerMember;
+        log.debug("LoanService initialized (maxActiveLoansPerMember={}).", maxActiveLoansPerMember);
     }
 
     // =========================================================
@@ -49,6 +72,33 @@ public class LoanService implements ServiceInterface<Loan, Long> {
 
         ValidationUtil.requireNonNull(model, "loan");
         validateLoanFields(model);
+
+        // ---------------------------------------------------------
+        // NEW: prevent double-checkout (active loan exists for book)
+        // ---------------------------------------------------------
+        if (loanDAO.hasActiveLoanForBook(model.getBookId())) {
+            // optional: pull details for better message
+            Optional<LoanEntity> active = loanDAO.findActiveLoanByBookId(model.getBookId());
+            String detail = active
+                    .map(a -> " (active loan id=" + a.getId() + ", due=" + a.getDueDate() + ")")
+                    .orElse("");
+            log.info("Checkout blocked: bookId={} already has an active loan{}", model.getBookId(), detail);
+            throw new IllegalStateException("Book is already checked out" + detail);
+        }
+
+        // ---------------------------------------------------------
+        // NEW: optional policy limit for member active loans
+        // ---------------------------------------------------------
+        if (maxActiveLoansPerMember > 0) {
+            int activeCount = loanDAO.countActiveLoansByMemberId(model.getMemberId());
+            if (activeCount >= maxActiveLoansPerMember) {
+                log.info("Checkout blocked: memberId={} has {} active loans (limit={}).",
+                        model.getMemberId(), activeCount, maxActiveLoansPerMember);
+                throw new IllegalStateException(
+                        "Member has reached the active loan limit (" + maxActiveLoansPerMember + ")."
+                );
+            }
+        }
 
         LoanEntity entity = toEntityForInsert(model);
         LoanEntity saved = loanDAO.save(entity);
@@ -108,8 +158,23 @@ public class LoanService implements ServiceInterface<Loan, Long> {
                     return new IllegalArgumentException("No loan found with id=" + id);
                 });
 
-        existing.setBookId(updatedModel.getBookId());
-        existing.setMemberId(updatedModel.getMemberId());
+        // ---------------------------------------------------------
+        // Recommended: do NOT allow changing book_id/member_id once created.
+        // Your DAO currently supports it, but this is a business-rule guard.
+        // If you truly want to allow it, remove these checks.
+        // ---------------------------------------------------------
+        if (existing.getBookId() != updatedModel.getBookId()) {
+            log.warn("update blocked: attempted to change bookId on loan id={} ({} -> {}).",
+                    id, existing.getBookId(), updatedModel.getBookId());
+            throw new IllegalStateException("Cannot change bookId for an existing loan.");
+        }
+        if (existing.getMemberId() != updatedModel.getMemberId()) {
+            log.warn("update blocked: attempted to change memberId on loan id={} ({} -> {}).",
+                    id, existing.getMemberId(), updatedModel.getMemberId());
+            throw new IllegalStateException("Cannot change memberId for an existing loan.");
+        }
+
+        // Update allowed fields (dates)
         existing.setCheckoutDate(updatedModel.getCheckoutDate());
         existing.setDueDate(updatedModel.getDueDate());
         existing.setReturnDate(updatedModel.getReturnDate());
@@ -129,14 +194,35 @@ public class LoanService implements ServiceInterface<Loan, Long> {
             return false;
         }
 
-        if (loanDAO.findById(id).isEmpty()) {
+        // ---------------------------------------------------------
+        // NEW: use lightweight existence check (faster than fetch)
+        // ---------------------------------------------------------
+        if (!loanDAO.existsById(id)) {
             log.info("delete skipped: no loan found with id={}", id);
             return false;
         }
 
-        loanDAO.deleteById(id);
+        // ---------------------------------------------------------
+        // Optional: safer delete strategy:
+        // - If you want to prevent deleting active loans, use deleteIfReturned.
+        // - If you want to allow any delete, call deleteById.
+        // Choose one policy and keep it consistent.
+        // ---------------------------------------------------------
+
+        // Policy A (recommended): only delete returned loans
+        boolean deleted = loanDAO.deleteIfReturned(id);
+        if (!deleted) {
+            log.info("delete blocked or not found: loan id={} is active or does not exist.", id);
+            return false;
+        }
+
         log.info("Loan deleted successfully for id={}", id);
         return true;
+
+        // Policy B (allow any delete):
+        // loanDAO.deleteById(id);
+        // log.info("Loan deleted successfully for id={}", id);
+        // return true;
     }
 
     // =========================================================
@@ -145,7 +231,7 @@ public class LoanService implements ServiceInterface<Loan, Long> {
 
     /**
      * Controller calls this when checking out a book.
-     * Just delegates to create().
+     * Delegates to create() (which now includes availability + policy checks).
      */
     public Long checkout(Loan loan) {
         log.debug("checkout called (delegating to create). bookId={}, memberId={}",
@@ -168,6 +254,10 @@ public class LoanService implements ServiceInterface<Loan, Long> {
         }
         ValidationUtil.requireNonNull(returnDate, "returnDate");
 
+        // ---------------------------------------------------------
+        // NEW: fetch only to validate returnDate >= checkoutDate
+        // then perform a race-safe update using DAO helper.
+        // ---------------------------------------------------------
         Optional<LoanEntity> maybeEntity = loanDAO.findById(loanId);
         if (maybeEntity.isEmpty()) {
             log.info("returnLoan: no loan found with id={}", loanId);
@@ -188,11 +278,14 @@ public class LoanService implements ServiceInterface<Loan, Long> {
             throw new IllegalArgumentException("returnDate cannot be before checkoutDate.");
         }
 
-        entity.setReturnDate(returnDate);
-        loanDAO.update(entity);
-
-        log.info("Loan returned successfully for loanId={} on {}", loanId, returnDate);
-        return true;
+        // Race-safe update (won’t overwrite if another thread returned it)
+        boolean success = loanDAO.setReturnDate(loanId, returnDate);
+        if (success) {
+            log.info("Loan returned successfully for loanId={} on {}", loanId, returnDate);
+        } else {
+            log.info("returnLoan: no active loan updated for loanId={} (already returned or not found).", loanId);
+        }
+        return success;
     }
 
     /**

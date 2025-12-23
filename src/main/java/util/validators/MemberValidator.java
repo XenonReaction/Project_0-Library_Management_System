@@ -2,33 +2,41 @@ package util.validators;
 
 import java.util.regex.Pattern;
 
-/**
- * Validates Member-related user input to match database constraints:
- * - name: NOT NULL (and non-blank), VARCHAR(255)
- * - email: nullable, VARCHAR(320), UNIQUE, and if present must match the SQL regex
- * - phone: nullable, VARCHAR(30)
- *
- * This class is designed for inline per-field validation (prompt -> validate -> reprompt).
- */
 public final class MemberValidator {
 
     private MemberValidator() {
         // utility class
     }
 
-    // Matches the SQL CHECK constraint:
-    // CHECK (email IS NULL OR email ~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$')
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$", Pattern.CASE_INSENSITIVE);
+
+    // Sentinel used in update prompts to keep existing value
+    private static final String KEEP_CURRENT = "-";
+
+    // ---------------------------
+    // IDs
+    // ---------------------------
+
+    public static long requireValidMemberId(long id) {
+        if (id <= 0) {
+            throw new IllegalArgumentException("Member ID must be a positive number.");
+        }
+        return id;
+    }
+
+    // ---------------------------
+    // Sentinels (controller consistency)
+    // ---------------------------
+
+    public static boolean isKeepCurrent(String input) {
+        return input != null && input.trim().equals(KEEP_CURRENT);
+    }
 
     // ---------------------------
     // Required fields
     // ---------------------------
 
-    /**
-     * Ensures name is not null/blank and returns a trimmed version.
-     * Enforces DB VARCHAR(255).
-     */
     public static String requireValidName(String name) {
         String n = normalizeRequiredText(name, "name");
 
@@ -42,23 +50,10 @@ public final class MemberValidator {
     // Optional fields (normalize + validate)
     // ---------------------------
 
-    /**
-     * Normalizes user input for an optional email field.
-     * - null/blank/"NONE" => null
-     * - otherwise => trimmed
-     */
     public static String normalizeOptionalEmail(String emailInput) {
         return normalizeOptionalText(emailInput);
     }
 
-    /**
-     * Validates optional email against DB constraints.
-     * - null is allowed
-     * - length <= 320
-     * - must match SQL email regex when not null
-     *
-     * Note: uniqueness is enforced by the DB (UNIQUE constraint), not here.
-     */
     public static String validateOptionalEmail(String email) {
         if (email == null) return null;
 
@@ -71,23 +66,10 @@ public final class MemberValidator {
         return email;
     }
 
-    /**
-     * Normalizes user input for an optional phone field.
-     * - null/blank/"NONE" => null
-     * - otherwise => trimmed
-     */
     public static String normalizeOptionalPhone(String phoneInput) {
         return normalizeOptionalText(phoneInput);
     }
 
-    /**
-     * Validates optional phone against DB constraints.
-     * - null is allowed
-     * - length <= 30
-     * - must not be blank when present
-     *
-     * (No DB regex/check beyond length, so we keep it simple here.)
-     */
     public static String validateOptionalPhone(String phone) {
         if (phone == null) return null;
 
@@ -98,6 +80,27 @@ public final class MemberValidator {
             throw new IllegalArgumentException("phone must be 30 characters or less.");
         }
         return phone;
+    }
+
+    // ---------------------------
+    // Update helpers (optional, for cleaner controllers)
+    // ---------------------------
+
+    public static String resolveUpdatedName(String input, String currentValue) {
+        if (isKeepCurrent(input)) return currentValue;
+        return requireValidName(input);
+    }
+
+    public static String resolveUpdatedEmail(String input, String currentValue) {
+        if (isKeepCurrent(input)) return currentValue;
+        String normalized = normalizeOptionalEmail(input);   // NONE/blank -> null
+        return validateOptionalEmail(normalized);
+    }
+
+    public static String resolveUpdatedPhone(String input, String currentValue) {
+        if (isKeepCurrent(input)) return currentValue;
+        String normalized = normalizeOptionalPhone(input);   // NONE/blank -> null
+        return validateOptionalPhone(normalized);
     }
 
     // ---------------------------
@@ -115,11 +118,6 @@ public final class MemberValidator {
         return trimmed;
     }
 
-    /**
-     * For optional text fields:
-     * - null/blank/"NONE" (case-insensitive) => null
-     * - otherwise => trimmed
-     */
     private static String normalizeOptionalText(String value) {
         if (value == null) return null;
 

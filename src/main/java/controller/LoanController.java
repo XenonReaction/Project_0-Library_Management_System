@@ -17,6 +17,11 @@ public class LoanController {
 
     private final LoanService loanService;
 
+    // Matches the defaults in your flow
+    private static final int DEFAULT_LOAN_DAYS = 14;
+    // Sanity cap (same spirit as your prior 3650 check). Adjust as desired.
+    private static final int MAX_LOAN_DAYS = 3650;
+
     public LoanController() {
         this.loanService = new LoanService();
         log.debug("LoanController initialized with default LoanService.");
@@ -140,10 +145,11 @@ public class LoanController {
         System.out.println("=== CHECKOUT BOOK ===");
 
         try {
-            // Inline validation per field (BookController style)
             long bookId = promptValidBookIdCheckout();
             long memberId = promptValidMemberIdCheckout();
-            int loanDays = promptLoanLengthDaysCheckout(); // normalized (defaults to 14)
+
+            // NEW: uses updated LoanValidator.normalizeLoanLengthDays(...)
+            int loanDays = promptLoanLengthDaysCheckout();
 
             LocalDate checkoutDate = LocalDate.now();
             LocalDate dueDate = checkoutDate.plusDays(loanDays);
@@ -151,6 +157,9 @@ public class LoanController {
             // Validate derived dates against constraints (defensive)
             LoanValidator.requireValidCheckoutDate(checkoutDate);
             LoanValidator.requireValidDueDate(dueDate, checkoutDate);
+
+            // OPTIONAL business rule (not required by DB): prevent future checkout date (always false with now())
+            // LoanValidator.requireNotFutureDate(checkoutDate, "checkoutDate");
 
             log.debug(
                     "Checkout validated input - bookId={}, memberId={}, loanDays={}, checkoutDate={}, dueDate={}",
@@ -170,8 +179,14 @@ public class LoanController {
             System.out.println("Checkout successful. Created loan id=" + id);
             System.out.println("Due date: " + dueDate);
 
+        } catch (IllegalStateException ex) {
+            // policy violations from LoanService (book already checked out, etc.)
+            log.warn("Checkout blocked by business rule: {}", ex.getMessage());
+            System.out.println("Checkout blocked: " + ex.getMessage());
+        } catch (IllegalArgumentException ex) {
+            log.warn("Validation error during checkout: {}", ex.getMessage());
+            System.out.println("Could not checkout book: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            // Note: inline validators throw IllegalArgumentException, which is a RuntimeException
             log.error("Unexpected error during checkout.", ex);
             System.out.println("Could not checkout book: " + ex.getMessage());
         }
@@ -183,11 +198,10 @@ public class LoanController {
 
         try {
             long loanId = promptValidLoanIdReturn();
-
-            // If you later choose to let users enter a custom return date, validate it
-            // against the loan's checkout date in the service layer (because you need
-            // the existing loan to compare).
             LocalDate returnDate = LocalDate.now();
+
+            // OPTIONAL business rule (not required by DB): prevent future return date (always false with now())
+            // LoanValidator.requireNotFutureDate(returnDate, "returnDate");
 
             log.debug("Return requested for loanId={} on {}", loanId, returnDate);
 
@@ -200,6 +214,9 @@ public class LoanController {
                 System.out.println("No active loan found with id=" + loanId + " (nothing returned).");
             }
 
+        } catch (IllegalArgumentException ex) {
+            log.warn("Validation error during return: {}", ex.getMessage());
+            System.out.println("Could not return loan: " + ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Unexpected error during return.", ex);
             System.out.println("Could not return loan: " + ex.getMessage());
@@ -243,9 +260,12 @@ public class LoanController {
                 log.info("Loan deleted successfully with id={}", id);
                 System.out.println("Deleted loan id=" + id);
             } else {
-                log.info("No loan found to delete with id={}", id);
-                System.out.println("No loan found with id=" + id + " (nothing deleted).");
+                log.info("Loan not deleted for id={} (not found or blocked by policy).", id);
+                System.out.println("Loan not deleted (not found or cannot delete an active loan). id=" + id);
             }
+        } catch (IllegalStateException ex) {
+            log.warn("Delete blocked by business rule: {}", ex.getMessage());
+            System.out.println("Delete blocked: " + ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Error deleting loan with id={}", id, ex);
             System.out.println("Error deleting loan.");
@@ -292,6 +312,9 @@ public class LoanController {
 
             loans.forEach(System.out::println);
 
+        } catch (IllegalArgumentException ex) {
+            log.warn("Validation error listing loans by member: {}", ex.getMessage());
+            System.out.println("Invalid member id: " + ex.getMessage());
         } catch (RuntimeException ex) {
             log.error("Error retrieving loans for memberId={}", memberId, ex);
             System.out.println("Error retrieving loans for member.");
@@ -324,7 +347,7 @@ public class LoanController {
     }
 
     // -------------------------------------------------------------------------
-    // Inline prompt + validation helpers (BookController-style)
+    // Inline prompt + validation helpers
     // -------------------------------------------------------------------------
 
     private long promptValidBookIdCheckout() {
@@ -352,25 +375,18 @@ public class LoanController {
     }
 
     /**
-     * Prompts for the loan length:
-     * - 0 or less => default 14
-     * - positive => use as-is
-     *
-     * (Not a DB constraint, but matches your existing controller behavior.)
+     * NEW: delegates normalization/validation to LoanValidator.normalizeLoanLengthDays(...)
+     * so the rule lives in one place.
      */
     private int promptLoanLengthDaysCheckout() {
         while (true) {
-            int input = InputUtil.readInt("Loan length in days (0 for default 14): ");
-            if (input <= 0) return 14;
-
-            // Optional sanity cap (feel free to remove). Helps prevent fat-finger errors.
-            if (input > 3650) {
-                log.warn("Unreasonably large loan length entered: {}", input);
-                System.out.println("That loan length seems too large. Please enter a smaller number.");
-                continue;
+            int input = InputUtil.readInt("Loan length in days (0 for default " + DEFAULT_LOAN_DAYS + "): ");
+            try {
+                return LoanValidator.normalizeLoanLengthDays(input, DEFAULT_LOAN_DAYS, MAX_LOAN_DAYS);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Invalid loan length entered: {}", ex.getMessage());
+                System.out.println("Invalid loan length: " + ex.getMessage());
             }
-
-            return input;
         }
     }
 

@@ -193,7 +193,7 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /* =========================================================
-       Additional Loan-specific queries
+       Additional Loan-specific queries (existing)
        ========================================================= */
 
     public List<LoanEntity> findByMemberId(long memberId) {
@@ -284,6 +284,182 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         } catch (SQLException e) {
             log.error("SQL error while finding overdue loans for date={}.", currentDate, e);
             throw new RuntimeException("Failed to find overdue loans", e);
+        }
+    }
+
+    /* =========================================================
+       Additional helpers to support service-layer checks (NEW)
+       ========================================================= */
+
+    /**
+     * Lightweight existence check for a loan id.
+     * Useful for "loan exists" checks without fetching the whole entity.
+     */
+    public boolean existsById(long id) {
+        final String sql = """
+            SELECT 1
+            FROM loans
+            WHERE id = ?
+            LIMIT 1
+            """;
+
+        log.debug("LoanDAO.existsById called (id={}).", id);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, id);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while checking loan existence for id={}.", id, e);
+            throw new RuntimeException("Failed to check existence for loan id=" + id, e);
+        }
+    }
+
+    /**
+     * Returns true if the given book currently has an active loan (i.e., return_date IS NULL).
+     * Use this to prevent double-checkout.
+     */
+    public boolean hasActiveLoanForBook(long bookId) {
+        final String sql = """
+            SELECT 1
+            FROM loans
+            WHERE book_id = ?
+              AND return_date IS NULL
+            LIMIT 1
+            """;
+
+        log.debug("LoanDAO.hasActiveLoanForBook called (bookId={}).", bookId);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, bookId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while checking active loan for bookId={}.", bookId, e);
+            throw new RuntimeException("Failed to check active loan for bookId=" + bookId, e);
+        }
+    }
+
+    /**
+     * If a book is checked out, returns the most recent active loan for that book.
+     * Handy when you want to show a helpful message like "book is already checked out (due ...)".
+     */
+    public Optional<LoanEntity> findActiveLoanByBookId(long bookId) {
+        final String sql = """
+            SELECT id, book_id, member_id, checkout_date, due_date, return_date
+            FROM loans
+            WHERE book_id = ?
+              AND return_date IS NULL
+            ORDER BY checkout_date DESC
+            LIMIT 1
+            """;
+
+        log.debug("LoanDAO.findActiveLoanByBookId called (bookId={}).", bookId);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, bookId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return Optional.empty();
+                return Optional.of(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while finding active loan for bookId={}.", bookId, e);
+            throw new RuntimeException("Failed to find active loan for bookId=" + bookId, e);
+        }
+    }
+
+    /**
+     * Counts how many active loans a member currently has (return_date IS NULL).
+     * Useful for a "max active loans per member" policy.
+     */
+    public int countActiveLoansByMemberId(long memberId) {
+        final String sql = """
+            SELECT COUNT(*) AS cnt
+            FROM loans
+            WHERE member_id = ?
+              AND return_date IS NULL
+            """;
+
+        log.debug("LoanDAO.countActiveLoansByMemberId called (memberId={}).", memberId);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, memberId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt("cnt");
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while counting active loans for memberId={}.", memberId, e);
+            throw new RuntimeException("Failed to count active loans for memberId=" + memberId, e);
+        }
+    }
+
+    /**
+     * Race-safe "return" operation:
+     * Updates return_date only if the loan is currently active (return_date IS NULL).
+     *
+     * @return true if the return succeeded (1 row updated), false if no active loan matched (already returned or not found)
+     */
+    public boolean setReturnDate(long loanId, LocalDate returnDate) {
+        final String sql = """
+            UPDATE loans
+            SET return_date = ?
+            WHERE id = ?
+              AND return_date IS NULL
+            """;
+
+        log.debug("LoanDAO.setReturnDate called (loanId={}, returnDate={}).", loanId, returnDate);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setDate(1, Date.valueOf(returnDate));
+            ps.setLong(2, loanId);
+
+            int rows = ps.executeUpdate();
+            boolean success = (rows == 1);
+
+            log.info("Loan return update (loanId={}) success={} rows={}", loanId, success, rows);
+            return success;
+
+        } catch (SQLException e) {
+            log.error("SQL error while setting return date for loanId={}.", loanId, e);
+            throw new RuntimeException("Failed to set return date for loanId=" + loanId, e);
+        }
+    }
+
+    /**
+     * Optional safety delete: only deletes loans that are already returned.
+     * If you want to preserve history, your service can choose to never call deleteById,
+     * and only call this method (or block deletes entirely).
+     *
+     * @return true if deleted, false if not deleted (not found OR still active)
+     */
+    public boolean deleteIfReturned(long loanId) {
+        final String sql = """
+            DELETE FROM loans
+            WHERE id = ?
+              AND return_date IS NOT NULL
+            """;
+
+        log.debug("LoanDAO.deleteIfReturned called (loanId={}).", loanId);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, loanId);
+
+            int rows = ps.executeUpdate();
+            boolean success = (rows == 1);
+
+            log.info("Loan deleteIfReturned (loanId={}) success={} rows={}", loanId, success, rows);
+            return success;
+
+        } catch (SQLException e) {
+            log.error("SQL error while deleting returned loanId={}.", loanId, e);
+            throw new RuntimeException("Failed to delete returned loan id=" + loanId, e);
         }
     }
 

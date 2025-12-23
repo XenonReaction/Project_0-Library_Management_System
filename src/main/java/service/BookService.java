@@ -100,9 +100,17 @@ public class BookService implements ServiceInterface<Book, Long> {
         ValidationUtil.validateOptionalIsbn(updatedModel.getIsbn());
         ValidationUtil.validateOptionalPublicationYear(updatedModel.getPublicationYear());
 
+        // (Optional) faster existence check than fetching the whole row, but we still
+        // fetch below to update the entity. This just improves logging/clarity.
+        if (!bookDAO.existsById(id)) {
+            log.info("update failed: no book found with id={}", id);
+            throw new IllegalArgumentException("No book found with id=" + id);
+        }
+
         BookEntity existing = bookDAO.findById(id)
                 .orElseThrow(() -> {
-                    log.info("update failed: no book found with id={}", id);
+                    // Should not happen because existsById was true, but keep safe.
+                    log.warn("update failed unexpectedly: existsById true but findById empty for id={}", id);
                     return new IllegalArgumentException("No book found with id=" + id);
                 });
 
@@ -129,14 +137,37 @@ public class BookService implements ServiceInterface<Book, Long> {
             return false;
         }
 
-        if (bookDAO.findById(id).isEmpty()) {
+        // Use lightweight existence check
+        if (!bookDAO.existsById(id)) {
             log.info("delete skipped: no book found with id={}", id);
             return false;
         }
 
-        bookDAO.deleteById(id);
-        log.info("Book deleted successfully for id={}", id);
-        return true;
+        // Guardrail for FK RESTRICT: don't even attempt the DELETE if referenced by loans
+        if (bookDAO.hasAnyLoans(id)) {
+            log.info("delete blocked: book id={} has related loans (FK RESTRICT).", id);
+            // Service returns false to indicate "not deleted" (could also throw a domain exception)
+            return false;
+        }
+
+        // Use the safe delete variant (boolean return)
+        boolean deleted = bookDAO.tryDeleteById(id);
+        if (deleted) {
+            log.info("Book deleted successfully for id={}", id);
+        } else {
+            // Rare race case: existed earlier but gone now.
+            log.warn("delete result: book id={} was not deleted (may have been removed concurrently).", id);
+        }
+        return deleted;
+    }
+
+    /**
+     * Optional helper for other services/controllers:
+     * true if the book currently has an active loan (return_date IS NULL).
+     */
+    public boolean isBookCheckedOut(Long bookId) {
+        if (bookId == null || bookId <= 0) return false;
+        return bookDAO.isCheckedOut(bookId);
     }
 
     // -------------------------
