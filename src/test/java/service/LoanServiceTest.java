@@ -4,11 +4,11 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
@@ -29,30 +29,42 @@ class LoanServiceTest {
     @Mock
     private LoanDAO loanDAO;
 
-    @InjectMocks
+    // IMPORTANT: Construct explicitly so we never accidentally use the no-arg constructor
+    // (which creates a real LoanDAO and bypasses the mock).
     private LoanService loanService;
 
     private Loan testLoanModel;
     private LoanEntity savedLoanEntity;
 
+    private Logger logger;
     private ListAppender<ILoggingEvent> listAppender;
 
     @BeforeEach
     void setup() {
+        // Ensure service uses the mocked DAO every time
+        loanService = new LoanService(loanDAO);
+
         LocalDate checkout = LocalDate.of(2025, 12, 1);
         LocalDate due = LocalDate.of(2025, 12, 15);
 
         testLoanModel = new Loan(5L, 7L, checkout, due, null);
         savedLoanEntity = new LoanEntity(100L, 5L, 7L, checkout, due, null);
 
-        Logger logger = (Logger) LoggerFactory.getLogger(LoanService.class);
+        // Safer log capture: attach our appender without nuking global config
+        logger = (Logger) LoggerFactory.getLogger(LoanService.class);
         logger.setLevel(Level.DEBUG);
 
         listAppender = new ListAppender<>();
         listAppender.start();
-
-        logger.detachAndStopAllAppenders();
         logger.addAppender(listAppender);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (logger != null && listAppender != null) {
+            logger.detachAppender(listAppender);
+            listAppender.stop();
+        }
     }
 
     private boolean hasLog(Level level, String containsText) {
@@ -88,6 +100,7 @@ class LoanServiceTest {
         assertNull(sent.getReturnDate());
 
         verify(loanDAO, times(1)).hasActiveLoanForBook(5L);
+
         assertTrue(hasLog(Level.INFO, "Loan created successfully with id=100"));
     }
 
@@ -103,7 +116,7 @@ class LoanServiceTest {
         ));
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> loanService.create(testLoanModel));
-        assertTrue(ex.getMessage().contains("already checked out"));
+        assertTrue(ex.getMessage().toLowerCase().contains("already checked out"));
 
         verify(loanDAO, times(1)).hasActiveLoanForBook(5L);
         verify(loanDAO, times(1)).findActiveLoanByBookId(5L);
@@ -179,7 +192,7 @@ class LoanServiceTest {
         assertTrue(loanService.getById((Long) null).isEmpty());
 
         verify(loanDAO, never()).findById(anyLong());
-        assertTrue(hasLog(Level.WARN, "getById called with invalid id="));
+        assertTrue(hasLog(Level.WARN, "getById called with invalid id"));
     }
 
     @Test
@@ -226,7 +239,7 @@ class LoanServiceTest {
         assertEquals(2L, results.get(1).getId());
 
         verify(loanDAO, times(1)).findAll();
-        assertTrue(hasLog(Level.DEBUG, "getAll returning 2 loans."));
+        assertTrue(hasLog(Level.DEBUG, "getAll returning 2 loans"));
     }
 
     // =========================================================
@@ -243,7 +256,7 @@ class LoanServiceTest {
 
         verify(loanDAO, never()).findById(anyLong());
         verify(loanDAO, never()).update(any());
-        assertTrue(hasLog(Level.WARN, "update called with invalid id="));
+        assertTrue(hasLog(Level.WARN, "update called with invalid id"));
     }
 
     @Test
@@ -263,6 +276,7 @@ class LoanServiceTest {
 
         verify(loanDAO, times(1)).findById(999L);
         verify(loanDAO, never()).update(any());
+
         assertTrue(hasLog(Level.INFO, "update failed: no loan found with id=999"));
     }
 
@@ -276,7 +290,6 @@ class LoanServiceTest {
         );
         when(loanDAO.findById(100L)).thenReturn(Optional.of(existing));
 
-        // Different bookId => should be blocked
         Loan updated = new Loan(
                 6L, 7L,
                 LocalDate.of(2025, 12, 2),
@@ -288,6 +301,7 @@ class LoanServiceTest {
 
         verify(loanDAO, times(1)).findById(100L);
         verify(loanDAO, never()).update(any());
+
         assertTrue(hasLog(Level.WARN, "update blocked: attempted to change bookId on loan id=100"));
     }
 
@@ -301,7 +315,6 @@ class LoanServiceTest {
         );
         when(loanDAO.findById(100L)).thenReturn(Optional.of(existing));
 
-        // bookId/memberId must match existing
         Loan updated = new Loan(
                 5L, 7L,
                 LocalDate.of(2025, 12, 2),
@@ -319,7 +332,17 @@ class LoanServiceTest {
         assertEquals(LocalDate.of(2025, 12, 21), result.getReturnDate());
 
         verify(loanDAO, times(1)).findById(100L);
-        verify(loanDAO, times(1)).update(existing);
+
+        ArgumentCaptor<LoanEntity> cap = ArgumentCaptor.forClass(LoanEntity.class);
+        verify(loanDAO, times(1)).update(cap.capture());
+
+        LoanEntity updatedEntity = cap.getValue();
+        assertEquals(100L, updatedEntity.getId());
+        assertEquals(5L, updatedEntity.getBookId());
+        assertEquals(7L, updatedEntity.getMemberId());
+        assertEquals(LocalDate.of(2025, 12, 2), updatedEntity.getCheckoutDate());
+        assertEquals(LocalDate.of(2025, 12, 20), updatedEntity.getDueDate());
+        assertEquals(LocalDate.of(2025, 12, 21), updatedEntity.getReturnDate());
 
         assertTrue(hasLog(Level.INFO, "Loan updated successfully for id=100"));
     }
@@ -336,7 +359,8 @@ class LoanServiceTest {
 
         verify(loanDAO, never()).existsById(anyLong());
         verify(loanDAO, never()).deleteIfReturned(anyLong());
-        assertTrue(hasLog(Level.WARN, "delete called with invalid id="));
+
+        assertTrue(hasLog(Level.WARN, "delete called with invalid id"));
     }
 
     @Test
@@ -416,7 +440,8 @@ class LoanServiceTest {
 
         verify(loanDAO, never()).findById(anyLong());
         verify(loanDAO, never()).setReturnDate(anyLong(), any());
-        assertTrue(hasLog(Level.WARN, "returnLoan called with invalid loanId="));
+
+        assertTrue(hasLog(Level.WARN, "returnLoan called with invalid loanId"));
     }
 
     @Test
@@ -457,7 +482,7 @@ class LoanServiceTest {
         verify(loanDAO, times(1)).findById(100L);
         verify(loanDAO, never()).setReturnDate(anyLong(), any());
 
-        assertTrue(hasLog(Level.INFO, "already returned"));
+        assertTrue(hasLog(Level.INFO, "returnLoan: loan id=100 already returned"));
     }
 
     @Test
@@ -517,7 +542,7 @@ class LoanServiceTest {
         assertFalse(result);
 
         verify(loanDAO, times(1)).setReturnDate(eq(100L), any(LocalDate.class));
-        assertTrue(hasLog(Level.INFO, "returnLoan: no active loan updated"));
+        assertTrue(hasLog(Level.INFO, "returnLoan: no active loan updated for loanId=100"));
     }
 
     // =========================================================
@@ -530,7 +555,7 @@ class LoanServiceTest {
         assertThrows(IllegalArgumentException.class, () -> loanService.getLoansByMemberId(-10));
 
         verify(loanDAO, never()).findByMemberId(anyLong());
-        assertTrue(hasLog(Level.WARN, "getLoansByMemberId called with invalid memberId="));
+        assertTrue(hasLog(Level.WARN, "getLoansByMemberId called with invalid memberId"));
     }
 
     @Test
@@ -547,6 +572,7 @@ class LoanServiceTest {
         assertEquals(7L, results.get(1).getMemberId());
 
         verify(loanDAO, times(1)).findByMemberId(7L);
+        assertTrue(hasLog(Level.DEBUG, "getLoansByMemberId returning 2 loans"));
     }
 
     @Test
@@ -563,6 +589,7 @@ class LoanServiceTest {
         assertNull(results.get(1).getReturnDate());
 
         verify(loanDAO, times(1)).findActiveLoans();
+        assertTrue(hasLog(Level.DEBUG, "getActiveLoans returning 2 loans"));
     }
 
     @Test
