@@ -11,24 +11,51 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * DAO for the books table.
+ * Data Access Object (DAO) for the {@code books} table.
+ *
+ * <p>This class implements {@link BaseDAO} and provides concrete JDBC-based
+ * persistence logic for {@link BookEntity} objects.
+ *
+ * <p>Responsibilities:
+ * <ul>
+ *   <li>Execute SQL statements against the {@code books} table</li>
+ *   <li>Map {@link ResultSet} rows to {@link BookEntity} objects</li>
+ *   <li>Handle JDBC resources safely using try-with-resources</li>
+ * </ul>
+ *
+ * <p>This class contains <strong>no business logic</strong>. Business rules
+ * (e.g., whether a book may be deleted while checked out) are enforced in the
+ * service layer, though this DAO provides helper query methods to support
+ * those rules.
  */
 public class BookDAO implements BaseDAO<BookEntity> {
 
     private static final Logger log = LoggerFactory.getLogger(BookDAO.class);
 
-    // --------------------------------------------------
-    // Shared connection for this DAO
-    // --------------------------------------------------
+    /**
+     * Shared database connection for this DAO.
+     *
+     * <p>Connection lifecycle is managed by {@link DbConnectionUtil}.
+     */
     private final Connection connection = DbConnectionUtil.getConnection();
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Implementation notes:
+     * <ul>
+     *   <li>Uses PostgreSQL {@code RETURNING id} to retrieve the generated primary key</li>
+     *   <li>Populates the generated ID directly into the provided {@link BookEntity}</li>
+     * </ul>
+     */
     @Override
     public BookEntity save(BookEntity book) {
         final String sql =
                 "INSERT INTO books (title, author, isbn, publication_year) " +
                         "VALUES (?, ?, ?, ?) RETURNING id;";
 
-        log.debug("BookDAO.save called (title='{}', author='{}').", book.getTitle(), book.getAuthor());
+        log.debug("BookDAO.save called (title='{}', author='{}').",
+                book.getTitle(), book.getAuthor());
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
@@ -67,6 +94,9 @@ public class BookDAO implements BaseDAO<BookEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Optional<BookEntity> findById(long id) {
         final String sql =
@@ -84,6 +114,7 @@ public class BookDAO implements BaseDAO<BookEntity> {
                     log.debug("No book found for id={}.", id);
                     return Optional.empty();
                 }
+
                 BookEntity entity = mapRow(rs);
                 log.debug("Book found for id={}.", id);
                 return Optional.of(entity);
@@ -95,6 +126,11 @@ public class BookDAO implements BaseDAO<BookEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Results are ordered by primary key for deterministic output.
+     */
     @Override
     public List<BookEntity> findAll() {
         final String sql =
@@ -121,6 +157,11 @@ public class BookDAO implements BaseDAO<BookEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Expects the provided {@link BookEntity} to already have a valid ID.
+     */
     @Override
     public void update(BookEntity book) {
         final String sql =
@@ -151,7 +192,8 @@ public class BookDAO implements BaseDAO<BookEntity> {
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
-                log.warn("Unexpected row count updating book id={}. rows={}", book.getId(), rows);
+                log.warn("Unexpected row count updating book id={}. rows={}",
+                        book.getId(), rows);
                 throw new RuntimeException(
                         "Failed to update book id=" + book.getId() + " (rows=" + rows + ")"
                 );
@@ -165,6 +207,12 @@ public class BookDAO implements BaseDAO<BookEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>This method expects the row to exist. If no row is affected,
+     * a {@link RuntimeException} is thrown.
+     */
     @Override
     public void deleteById(long id) {
         final String sql = "DELETE FROM books WHERE id = ?;";
@@ -196,8 +244,13 @@ public class BookDAO implements BaseDAO<BookEntity> {
     // -------------------------------------------------------------------------
 
     /**
-     * Lightweight existence check. Useful to avoid pointless calls and to give
-     * cleaner service/controller messaging.
+     * Checks whether a book exists by ID.
+     *
+     * <p>This is a lightweight existence check used to avoid unnecessary
+     * update/delete attempts and to support clearer service-layer messaging.
+     *
+     * @param id book ID to check
+     * @return {@code true} if the book exists, {@code false} otherwise
      */
     public boolean existsById(long id) {
         final String sql = "SELECT 1 FROM books WHERE id = ?;";
@@ -215,8 +268,13 @@ public class BookDAO implements BaseDAO<BookEntity> {
     }
 
     /**
-     * Returns true if the book has any loan rows (active or historical).
-     * Helpful before DELETE because loans.book_id -> books.id uses ON DELETE RESTRICT.
+     * Determines whether a book has any loan history.
+     *
+     * <p>This includes both active and historical loans and is useful
+     * before attempting deletes when foreign-key constraints are present.
+     *
+     * @param bookId book ID to check
+     * @return {@code true} if at least one loan exists, {@code false} otherwise
      */
     public boolean hasAnyLoans(long bookId) {
         final String sql = "SELECT 1 FROM loans WHERE book_id = ? LIMIT 1;";
@@ -234,8 +292,13 @@ public class BookDAO implements BaseDAO<BookEntity> {
     }
 
     /**
-     * Returns true if the book currently has an active loan (return_date IS NULL).
-     * This is usually a service-level rule, but the DAO can provide the query helper.
+     * Checks whether a book is currently checked out.
+     *
+     * <p>A book is considered checked out if it has a loan with
+     * {@code return_date IS NULL}.
+     *
+     * @param bookId book ID to check
+     * @return {@code true} if the book is currently checked out
      */
     public boolean isCheckedOut(long bookId) {
         final String sql = """
@@ -245,6 +308,7 @@ public class BookDAO implements BaseDAO<BookEntity> {
               AND return_date IS NULL
             LIMIT 1;
             """;
+
         log.debug("BookDAO.isCheckedOut called (bookId={}).", bookId);
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -259,9 +323,13 @@ public class BookDAO implements BaseDAO<BookEntity> {
     }
 
     /**
-     * "Safe" delete that returns false if the row didn't exist.
-     * Still throws on SQL errors. FK violations will still throw unless you
-     * pre-check hasAnyLoans(bookId).
+     * Attempts to delete a book by ID without throwing if the row does not exist.
+     *
+     * <p>Foreign-key violations (e.g., existing loans) will still result
+     * in an exception unless pre-checked with {@link #hasAnyLoans(long)}.
+     *
+     * @param id book ID to delete
+     * @return {@code true} if exactly one row was deleted, {@code false} otherwise
      */
     public boolean tryDeleteById(long id) {
         final String sql = "DELETE FROM books WHERE id = ?;";
@@ -282,6 +350,13 @@ public class BookDAO implements BaseDAO<BookEntity> {
     // Row mapper
     // --------------------------------------------------
 
+    /**
+     * Maps the current row of a {@link ResultSet} to a {@link BookEntity}.
+     *
+     * @param rs active result set positioned at a valid row
+     * @return mapped {@link BookEntity}
+     * @throws SQLException if column access fails
+     */
     private BookEntity mapRow(ResultSet rs) throws SQLException {
         return new BookEntity(
                 rs.getLong("id"),

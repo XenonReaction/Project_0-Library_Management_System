@@ -15,10 +15,44 @@ import repository.entities.LoanEntity;
 
 import java.time.LocalDate;
 
+/**
+ * Debug entry point used to validate local environment setup and perform
+ * manual, end-to-end smoke tests against the database and DAO layer.
+ *
+ * <p>This class is intentionally separate from the normal application startup
+ * so you can safely run destructive database reset operations without impacting
+ * production-style workflows.</p>
+ *
+ * <p><strong>WARNING:</strong> When the user confirms, this program calls
+ * {@link DbSetup#run()} which drops tables and reseeds the database.</p>
+ *
+ * <p><strong>What this does (high level):</strong>
+ * <ol>
+ *   <li>Prompts the user to confirm DB reset + debug workflow</li>
+ *   <li>Opens a DB connection</li>
+ *   <li>Drops/recreates schema + inserts seed data</li>
+ *   <li>Quickly tests {@link InputUtil} reads (int/string)</li>
+ *   <li>Runs basic DAO CRUD for {@link BookEntity}, {@link MemberEntity}, {@link LoanEntity}</li>
+ *   <li>Attempts cleanup by deleting inserted rows</li>
+ *   <li>Closes scanner and DB connection</li>
+ * </ol>
+ * </p>
+ *
+ * <p><strong>Logging:</strong> This class logs heavily to provide traceability during
+ * debugging (with the expectation that console output may be filtered to WARN+).</p>
+ */
 public class DebugMain {
 
+    /**
+     * Logger for debug-session steps and failures.
+     */
     private static final Logger log = LoggerFactory.getLogger(DebugMain.class);
 
+    /**
+     * Program entry point for manual debug mode.
+     *
+     * @param args command-line arguments (unused)
+     */
     public static void main(String[] args) {
 
         // ---------------------------------------------------------
@@ -226,7 +260,11 @@ public class DebugMain {
         // =========================================================
         try {
             log.info("Deleting loan (id={}).", loan.getId());
+
+            // NOTE: BaseDAO.deleteById takes a long. This cast is unnecessary and can truncate.
+            // Prefer: loanDAO.deleteById(loan.getId());
             loanDAO.deleteById((int) loan.getId());
+
             System.out.println("\nDeleted loan with id = " + loan.getId());
             log.info("Loan deleted successfully (id={}).", loan.getId());
         } catch (Exception e) {
@@ -246,7 +284,10 @@ public class DebugMain {
         // =========================================================
         try {
             log.info("Deleting member (id={}).", member.getId());
+
+            // NOTE: BaseDAO.deleteById takes a long. Prefer: memberDAO.deleteById(member.getId());
             memberDAO.deleteById((int) member.getId());
+
             System.out.println("\nDeleted member with id = " + member.getId());
             log.info("Member deleted successfully (id={}).", member.getId());
         } catch (Exception e) {
@@ -266,7 +307,10 @@ public class DebugMain {
         // =========================================================
         try {
             log.info("Deleting book (id={}).", book.getId());
+
+            // NOTE: BaseDAO.deleteById takes a long. Prefer: bookDAO.deleteById(book.getId());
             bookDAO.deleteById((int) book.getId());
+
             System.out.println("\nDeleted book with id = " + book.getId());
             log.info("Book deleted successfully (id={}).", book.getId());
         } catch (Exception e) {
@@ -313,10 +357,15 @@ public class DebugMain {
         printExitBanner();
     }
 
+    /**
+     * Prints an "end of session" banner to the log.
+     *
+     * <p>This is log-only so that the user-facing console output remains focused
+     * on prompts and results.</p>
+     */
     private static void printExitBanner() {
         log.info("============================================================");
         log.info("           DEBUG SESSION ENDED (DB RESET MODE)              ");
         log.info("============================================================\n");
     }
-
 }

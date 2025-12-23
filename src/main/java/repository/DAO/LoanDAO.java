@@ -11,15 +11,43 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Data Access Object (DAO) for the {@code loans} table.
+ *
+ * <p>This class implements {@link BaseDAO} and provides concrete JDBC-based persistence
+ * logic for {@link LoanEntity} objects.
+ *
+ * <p>Responsibilities:
+ * <ul>
+ *   <li>Execute SQL statements against the {@code loans} table</li>
+ *   <li>Map {@link ResultSet} rows to {@link LoanEntity} objects</li>
+ *   <li>Provide loan-specific queries to support service-layer business rules</li>
+ * </ul>
+ *
+ * <p>This class contains <strong>no business logic</strong>. Business rules (e.g.,
+ * preventing double-checkout) should be enforced by the service layer. This DAO
+ * may provide helper queries to enable those service checks.
+ */
 public class LoanDAO implements BaseDAO<LoanEntity> {
 
     private static final Logger log = LoggerFactory.getLogger(LoanDAO.class);
 
-    // --------------------------------------------------
-    // Shared connection for this DAO
-    // --------------------------------------------------
+    /**
+     * Shared database connection for this DAO.
+     *
+     * <p>Connection lifecycle is managed by {@link DbConnectionUtil}.
+     */
     private final Connection connection = DbConnectionUtil.getConnection();
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Implementation notes:
+     * <ul>
+     *   <li>Uses PostgreSQL {@code RETURNING id} to retrieve the generated primary key</li>
+     *   <li>Populates the generated ID directly into the provided {@link LoanEntity}</li>
+     * </ul>
+     */
     @Override
     public LoanEntity save(LoanEntity loan) {
         final String sql = """
@@ -64,6 +92,9 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Optional<LoanEntity> findById(long id) {
         final String sql = """
@@ -94,6 +125,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Results are ordered by {@code checkout_date DESC} so the most recent loans appear first.
+     */
     @Override
     public List<LoanEntity> findAll() {
         final String sql = """
@@ -122,6 +158,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Expects the provided {@link LoanEntity} to already have a valid ID.
+     */
     @Override
     public void update(LoanEntity loan) {
         final String sql = """
@@ -163,6 +204,12 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>This method expects the row to exist. If no row is affected,
+     * a {@link RuntimeException} is thrown.
+     */
     @Override
     public void deleteById(long id) {
         final String sql = """
@@ -193,9 +240,15 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /* =========================================================
-       Additional Loan-specific queries (existing)
+       Additional Loan-specific queries
        ========================================================= */
 
+    /**
+     * Retrieves all loans for a given member.
+     *
+     * @param memberId member ID to filter by
+     * @return list of loans for the member (may be empty)
+     */
     public List<LoanEntity> findByMemberId(long memberId) {
         final String sql = """
             SELECT id, book_id, member_id, checkout_date, due_date, return_date
@@ -218,7 +271,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 }
             }
 
-            log.debug("LoanDAO.findByMemberId returning {} loans for memberId={}.", loans.size(), memberId);
+            log.debug("LoanDAO.findByMemberId returning {} loans for memberId={}.",
+                    loans.size(), memberId);
             return loans;
 
         } catch (SQLException e) {
@@ -227,6 +281,11 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         }
     }
 
+    /**
+     * Retrieves all active loans (loans with {@code return_date IS NULL}).
+     *
+     * @return list of active loans ordered by due date
+     */
     public List<LoanEntity> findActiveLoans() {
         final String sql = """
             SELECT id, book_id, member_id, checkout_date, due_date, return_date
@@ -255,6 +314,15 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         }
     }
 
+    /**
+     * Retrieves all overdue loans as of the provided date.
+     *
+     * <p>A loan is overdue if:
+     * {@code return_date IS NULL AND due_date < currentDate}.
+     *
+     * @param currentDate date used as the "today" reference for overdue evaluation
+     * @return list of overdue loans ordered by due date
+     */
     public List<LoanEntity> findOverdueLoans(LocalDate currentDate) {
         final String sql = """
             SELECT id, book_id, member_id, checkout_date, due_date, return_date
@@ -278,7 +346,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
                 }
             }
 
-            log.debug("LoanDAO.findOverdueLoans returning {} loans for date={}.", loans.size(), currentDate);
+            log.debug("LoanDAO.findOverdueLoans returning {} loans for date={}.",
+                    loans.size(), currentDate);
             return loans;
 
         } catch (SQLException e) {
@@ -288,12 +357,16 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /* =========================================================
-       Additional helpers to support service-layer checks (NEW)
+       Additional helpers to support service-layer checks
        ========================================================= */
 
     /**
-     * Lightweight existence check for a loan id.
-     * Useful for "loan exists" checks without fetching the whole entity.
+     * Checks whether a loan exists by ID.
+     *
+     * <p>This is a lightweight existence check used to avoid unnecessary fetches.
+     *
+     * @param id loan ID to check
+     * @return {@code true} if the loan exists, {@code false} otherwise
      */
     public boolean existsById(long id) {
         final String sql = """
@@ -318,8 +391,12 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /**
-     * Returns true if the given book currently has an active loan (i.e., return_date IS NULL).
-     * Use this to prevent double-checkout.
+     * Checks whether a given book currently has an active loan.
+     *
+     * <p>Used by the service layer to prevent a second checkout while a loan is active.
+     *
+     * @param bookId book ID to check
+     * @return {@code true} if an active loan exists for this book
      */
     public boolean hasActiveLoanForBook(long bookId) {
         final String sql = """
@@ -345,8 +422,13 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /**
-     * If a book is checked out, returns the most recent active loan for that book.
-     * Handy when you want to show a helpful message like "book is already checked out (due ...)".
+     * Retrieves the most recent active loan for a given book, if one exists.
+     *
+     * <p>This is useful for user-facing messages like:
+     * "Book is already checked out (due YYYY-MM-DD)".
+     *
+     * @param bookId book ID to check
+     * @return optional active loan
      */
     public Optional<LoanEntity> findActiveLoanByBookId(long bookId) {
         final String sql = """
@@ -374,8 +456,10 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /**
-     * Counts how many active loans a member currently has (return_date IS NULL).
-     * Useful for a "max active loans per member" policy.
+     * Counts how many active loans a member currently has.
+     *
+     * @param memberId member ID to check
+     * @return number of active loans for the member
      */
     public int countActiveLoansByMemberId(long memberId) {
         final String sql = """
@@ -401,10 +485,14 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /**
-     * Race-safe "return" operation:
-     * Updates return_date only if the loan is currently active (return_date IS NULL).
+     * Sets {@code return_date} for a loan only if the loan is currently active.
      *
-     * @return true if the return succeeded (1 row updated), false if no active loan matched (already returned or not found)
+     * <p>This is "race-safe" in the sense that it will not overwrite a return date
+     * if another operation already returned the loan.
+     *
+     * @param loanId loan ID to return
+     * @param returnDate date to set as the return date
+     * @return {@code true} if exactly one row was updated, {@code false} if no active loan matched
      */
     public boolean setReturnDate(long loanId, LocalDate returnDate) {
         final String sql = """
@@ -423,7 +511,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             int rows = ps.executeUpdate();
             boolean success = (rows == 1);
 
-            log.info("Loan return update (loanId={}) success={} rows={}", loanId, success, rows);
+            log.info("Loan return update (loanId={}) success={} rows={}",
+                    loanId, success, rows);
             return success;
 
         } catch (SQLException e) {
@@ -433,11 +522,13 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /**
-     * Optional safety delete: only deletes loans that are already returned.
-     * If you want to preserve history, your service can choose to never call deleteById,
-     * and only call this method (or block deletes entirely).
+     * Deletes a loan only if it has already been returned.
      *
-     * @return true if deleted, false if not deleted (not found OR still active)
+     * <p>This supports a policy of preserving active loans while allowing cleanup
+     * of historical records when appropriate.
+     *
+     * @param loanId loan ID to delete
+     * @return {@code true} if deleted, {@code false} if not found or still active
      */
     public boolean deleteIfReturned(long loanId) {
         final String sql = """
@@ -454,7 +545,8 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             int rows = ps.executeUpdate();
             boolean success = (rows == 1);
 
-            log.info("Loan deleteIfReturned (loanId={}) success={} rows={}", loanId, success, rows);
+            log.info("Loan deleteIfReturned (loanId={}) success={} rows={}",
+                    loanId, success, rows);
             return success;
 
         } catch (SQLException e) {
@@ -464,9 +556,16 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
     }
 
     /* =========================================================
-       Helper
+       Row mapper
        ========================================================= */
 
+    /**
+     * Maps the current row of a {@link ResultSet} to a {@link LoanEntity}.
+     *
+     * @param rs active result set positioned at a valid row
+     * @return mapped {@link LoanEntity}
+     * @throws SQLException if column access fails
+     */
     private LoanEntity mapRow(ResultSet rs) throws SQLException {
         LocalDate returnDate = null;
         Date sqlReturnDate = rs.getDate("return_date");

@@ -9,23 +9,53 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * Utility class to reset and seed the database.
+ * Utility class responsible for resetting and seeding the database.
  *
- * WARNING:
- * Calling this will DROP ALL DATA in books, members, and loans.
+ * <p>This class is intended for development, testing, and demo purposes.
+ * It performs a full database reset by:</p>
+ * <ol>
+ *   <li>Dropping existing tables</li>
+ *   <li>Recreating the database schema</li>
+ *   <li>Inserting predefined seed (dummy) data</li>
+ * </ol>
+ *
+ * <p><strong>WARNING:</strong> Calling {@link #run()} will permanently delete
+ * all data in the {@code books}, {@code members}, and {@code loans} tables.</p>
+ *
+ * <p>This class operates directly at the repository/database level and should
+ * never be exposed to end users in a production environment.</p>
  */
 public class DbSetup {
 
+    /**
+     * Logger for database setup operations.
+     */
     private static final Logger log = LoggerFactory.getLogger(DbSetup.class);
 
+    /**
+     * Executes a full database reset.
+     *
+     * <p>This method:</p>
+     * <ul>
+     *   <li>Disables auto-commit</li>
+     *   <li>Drops all existing tables</li>
+     *   <li>Recreates the schema</li>
+     *   <li>Inserts seed data</li>
+     *   <li>Commits the transaction if successful</li>
+     * </ul>
+     *
+     * <p>If any step fails, the transaction is rolled back to prevent
+     * partial or corrupted state.</p>
+     *
+     * @throws RuntimeException if the reset fails or rollback cannot be completed
+     */
     public static void run() {
         log.info("Database reset started (DROP + CREATE + SEED).");
 
         Connection conn = DbConnectionUtil.getConnection();
-        boolean originalAutoCommit;
 
         try {
-            originalAutoCommit = conn.getAutoCommit();
+            boolean originalAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
 
             log.debug("Auto-commit disabled. Beginning transaction.");
@@ -37,6 +67,9 @@ public class DbSetup {
             conn.commit();
             log.info("Database reset completed successfully. Transaction committed.");
 
+            conn.setAutoCommit(originalAutoCommit);
+            log.debug("Auto-commit restored to original state.");
+
         } catch (SQLException e) {
             log.error("Database reset failed. Attempting rollback.", e);
             try {
@@ -47,15 +80,6 @@ public class DbSetup {
                 throw new RuntimeException("Rollback failed", rollbackEx);
             }
             throw new RuntimeException("DbSetup failed", e);
-
-        } finally {
-            try {
-                conn.setAutoCommit(true);
-                log.debug("Auto-commit restored to original state.");
-            } catch (SQLException e) {
-                log.error("Failed to restore auto-commit.", e);
-                throw new RuntimeException("Failed to restore auto-commit", e);
-            }
         }
     }
 
@@ -63,6 +87,15 @@ public class DbSetup {
     // Drop tables
     // ----------------------------------------------------
 
+    /**
+     * Drops all database tables used by the application.
+     *
+     * <p>Tables are dropped in dependency order using {@code CASCADE}
+     * to ensure foreign key constraints do not block deletion.</p>
+     *
+     * @param conn active database connection
+     * @throws SQLException if a SQL error occurs
+     */
     private static void dropTables(Connection conn) throws SQLException {
         log.debug("Dropping existing tables.");
         execute(conn, "DROP TABLE IF EXISTS loans CASCADE");
@@ -74,10 +107,19 @@ public class DbSetup {
     // Create schema
     // ----------------------------------------------------
 
+    /**
+     * Creates the database schema, including tables, constraints, and indexes.
+     *
+     * <p>The schema is designed to be in Third Normal Form (3NF) and enforces
+     * integrity through foreign keys, check constraints, and unique indexes.</p>
+     *
+     * @param conn active database connection
+     * @throws SQLException if a SQL error occurs
+     */
     private static void createSchema(Connection conn) throws SQLException {
         log.debug("Creating database schema.");
 
-        // BOOKS
+        // BOOKS TABLE
         execute(conn, """
             CREATE TABLE IF NOT EXISTS books (
                 id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -97,7 +139,7 @@ public class DbSetup {
             ON books (title, author)
             """);
 
-        // MEMBERS
+        // MEMBERS TABLE
         execute(conn, """
             CREATE TABLE IF NOT EXISTS members (
                 id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -115,7 +157,7 @@ public class DbSetup {
             ON members (name)
             """);
 
-        // LOANS
+        // LOANS TABLE
         execute(conn, """
             CREATE TABLE IF NOT EXISTS loans (
                 id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -169,6 +211,15 @@ public class DbSetup {
     // Insert dummy data
     // ----------------------------------------------------
 
+    /**
+     * Inserts predefined seed data into the database.
+     *
+     * <p>The data includes sample books, members, and loans to allow
+     * immediate testing of application features.</p>
+     *
+     * @param conn active database connection
+     * @throws SQLException if a SQL error occurs
+     */
     private static void insertDummyData(Connection conn) throws SQLException {
         log.debug("Inserting seed data.");
 
@@ -211,6 +262,13 @@ public class DbSetup {
     // Helper
     // ----------------------------------------------------
 
+    /**
+     * Executes a single SQL statement using the provided connection.
+     *
+     * @param conn active database connection
+     * @param sql  SQL statement to execute
+     * @throws SQLException if execution fails
+     */
     private static void execute(Connection conn, String sql) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sql);

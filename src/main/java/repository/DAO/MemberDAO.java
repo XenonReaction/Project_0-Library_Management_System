@@ -10,15 +10,46 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Data Access Object (DAO) for the {@code members} table.
+ *
+ * <p>This class implements {@link BaseDAO} and provides concrete JDBC-based persistence
+ * operations for {@link MemberEntity} objects.
+ *
+ * <p>Responsibilities:
+ * <ul>
+ *   <li>Execute SQL statements against the {@code members} table</li>
+ *   <li>Map {@link ResultSet} rows to {@link MemberEntity} objects</li>
+ *   <li>Provide helper queries to support service-layer prechecks (existence, uniqueness, FK restrictions)</li>
+ * </ul>
+ *
+ * <p>This class contains <strong>no business logic</strong>. Policy decisions (e.g., whether deletes
+ * are permitted when loan history exists) belong in the service layer. This DAO only provides
+ * query helpers to enable those rules.
+ *
+ * <p><strong>PII note:</strong> This DAO intentionally avoids logging member email/phone values.
+ */
 public class MemberDAO implements BaseDAO<MemberEntity> {
 
     private static final Logger log = LoggerFactory.getLogger(MemberDAO.class);
 
-    // --------------------------------------------------
-    // Shared connection for this DAO
-    // --------------------------------------------------
+    /**
+     * Shared database connection for this DAO.
+     *
+     * <p>Connection lifecycle is managed by {@link DbConnectionUtil}.
+     */
     private final Connection connection = DbConnectionUtil.getConnection();
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Implementation notes:
+     * <ul>
+     *   <li>Uses PostgreSQL {@code RETURNING id} to retrieve the generated primary key</li>
+     *   <li>Populates the generated ID directly into the provided {@link MemberEntity}</li>
+     *   <li>PII-safe logging: does not log email/phone values</li>
+     * </ul>
+     */
     @Override
     public MemberEntity save(MemberEntity member) {
         final String sql = """
@@ -27,7 +58,7 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
             RETURNING id
             """;
 
-        // PII-safe: log name only at DEBUG (optional), never log email/phone
+        // PII-safe: log name only (optional), never log email/phone
         log.debug("MemberDAO.save called (name='{}').", member.getName());
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -59,6 +90,9 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Optional<MemberEntity> findById(long id) {
         final String sql = """
@@ -96,6 +130,11 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Results are ordered by primary key for deterministic output.
+     */
     @Override
     public List<MemberEntity> findAll() {
         final String sql = """
@@ -129,6 +168,11 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Expects the provided {@link MemberEntity} to already have a valid ID.
+     */
     @Override
     public void update(MemberEntity member) {
         final String sql = """
@@ -153,8 +197,11 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
 
             int rows = ps.executeUpdate();
             if (rows != 1) {
-                log.warn("Unexpected row count updating member id={}. rows={}", member.getId(), rows);
-                throw new RuntimeException("Failed to update member id=" + member.getId() + " (rows=" + rows + ")");
+                log.warn("Unexpected row count updating member id={}. rows={}",
+                        member.getId(), rows);
+                throw new RuntimeException(
+                        "Failed to update member id=" + member.getId() + " (rows=" + rows + ")"
+                );
             }
 
             log.info("Member updated successfully (id={}).", member.getId());
@@ -165,6 +212,12 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>This method expects the row to exist. If no row is affected,
+     * a {@link RuntimeException} is thrown.
+     */
     @Override
     public void deleteById(long id) {
         final String sql = """
@@ -181,7 +234,9 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
             int rows = ps.executeUpdate();
             if (rows != 1) {
                 log.warn("Unexpected row count deleting member id={}. rows={}", id, rows);
-                throw new RuntimeException("Failed to delete member id=" + id + " (rows=" + rows + ")");
+                throw new RuntimeException(
+                        "Failed to delete member id=" + id + " (rows=" + rows + ")"
+                );
             }
 
             log.info("Member deleted successfully (id={}).", id);
@@ -197,7 +252,13 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
     // -------------------------------------------------------------------------
 
     /**
-     * Returns true if a member exists with the given id.
+     * Checks whether a member exists by ID.
+     *
+     * <p>This is a lightweight existence check used to avoid unnecessary fetches
+     * and to support clearer service/controller messaging.
+     *
+     * @param id member ID to check
+     * @return {@code true} if the member exists, {@code false} otherwise
      */
     public boolean existsById(long id) {
         final String sql = """
@@ -224,10 +285,21 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
     }
 
     /**
-     * Returns true if the given email does NOT exist in the database.
-     * - email == null => true (null emails are allowed; uniqueness only applies to non-null values)
+     * Checks whether an email is available (i.e., not already present).
      *
-     * NOTE: This is a pre-check for nicer UX; the UNIQUE constraint is still the source of truth.
+     * <p>Rules:
+     * <ul>
+     *   <li>{@code email == null} returns {@code true} (null emails are allowed)</li>
+     *   <li>For non-null emails, {@code true} means no row currently uses that value</li>
+     * </ul>
+     *
+     * <p><strong>Important:</strong> This is a pre-check for user experience.
+     * The database UNIQUE constraint remains the source of truth.
+     *
+     * <p><strong>PII note:</strong> This method does not log the email value.
+     *
+     * @param email email to check (may be null)
+     * @return {@code true} if the email may be used, {@code false} if already taken
      */
     public boolean isEmailAvailable(String email) {
         if (email == null) return true;
@@ -257,10 +329,20 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
     }
 
     /**
-     * Returns true if the given email is available for an update to memberId.
-     * - email == null => true (null is allowed)
-     * - returns false if the email belongs to a DIFFERENT member
-     * - returns true if no member has it, or if the only match is memberId
+     * Checks whether an email is available for updating a specific member.
+     *
+     * <p>Rules:
+     * <ul>
+     *   <li>{@code email == null} returns {@code true} (null is allowed)</li>
+     *   <li>Returns {@code false} if the email belongs to a <em>different</em> member</li>
+     *   <li>Returns {@code true} if no member has it, or if the only match is {@code memberId}</li>
+     * </ul>
+     *
+     * <p><strong>PII note:</strong> This method does not log the email value.
+     *
+     * @param memberId member being updated
+     * @param email proposed email value (may be null)
+     * @return {@code true} if the update would not violate uniqueness, {@code false} otherwise
      */
     public boolean isEmailAvailableForUpdate(long memberId, String email) {
         if (email == null) return true;
@@ -282,18 +364,28 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
 
             try (ResultSet rs = ps.executeQuery()) {
                 boolean available = !rs.next();
-                log.debug("MemberDAO.isEmailAvailableForUpdate result (memberId={}): {}", memberId, available);
+                log.debug("MemberDAO.isEmailAvailableForUpdate result (memberId={}): {}",
+                        memberId, available);
                 return available;
             }
         } catch (SQLException e) {
-            log.error("SQL error while checking email availability for update (memberId={}).", memberId, e);
-            throw new RuntimeException("Failed to check email availability for update (memberId=" + memberId + ")", e);
+            log.error("SQL error while checking email availability for update (memberId={}).",
+                    memberId, e);
+            throw new RuntimeException(
+                    "Failed to check email availability for update (memberId=" + memberId + ")",
+                    e
+            );
         }
     }
 
     /**
-     * Returns true if the member has any loans (active OR returned).
-     * Useful for pre-checking whether delete will be blocked by FK RESTRICT.
+     * Checks whether a member has any loan history (active or returned).
+     *
+     * <p>This is useful for pre-checking whether a delete is likely to be blocked
+     * by foreign key restrictions ({@code loans.member_id -> members.id}).
+     *
+     * @param memberId member ID to check
+     * @return {@code true} if at least one loan exists, {@code false} otherwise
      */
     public boolean hasAnyLoans(long memberId) {
         final String sql = """
@@ -320,8 +412,13 @@ public class MemberDAO implements BaseDAO<MemberEntity> {
     }
 
     /**
-     * Returns true if the member has any ACTIVE loans (return_date IS NULL).
-     * Optional alternative rule if you only want to block delete when books are still checked out.
+     * Checks whether a member has any active loans (loans with {@code return_date IS NULL}).
+     *
+     * <p>This supports an optional policy where deletion is blocked only if a member
+     * currently has books checked out, rather than blocking deletion for any loan history.
+     *
+     * @param memberId member ID to check
+     * @return {@code true} if at least one active loan exists, {@code false} otherwise
      */
     public boolean hasActiveLoans(long memberId) {
         final String sql = """
