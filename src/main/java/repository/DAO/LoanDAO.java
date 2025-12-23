@@ -27,10 +27,20 @@ import java.util.Optional;
  * <p>This class contains <strong>no business logic</strong>. Business rules (e.g.,
  * preventing double-checkout) should be enforced by the service layer. This DAO
  * may provide helper queries to enable those service checks.
+ *
+ * <p><strong>Error handling note:</strong> This DAO translates certain common SQL constraint
+ * failures into {@link IllegalArgumentException} to provide clearer, user-friendly messages
+ * to the controller/service layers, while still logging full details for troubleshooting.
  */
 public class LoanDAO implements BaseDAO<LoanEntity> {
 
     private static final Logger log = LoggerFactory.getLogger(LoanDAO.class);
+
+    // PostgreSQL SQLSTATE codes (https://www.postgresql.org/docs/current/errcodes-appendix.html)
+    private static final String SQLSTATE_FOREIGN_KEY_VIOLATION = "23503";
+    private static final String SQLSTATE_UNIQUE_VIOLATION = "23505";
+    private static final String SQLSTATE_CHECK_VIOLATION = "23514";
+    private static final String SQLSTATE_NOT_NULL_VIOLATION = "23502";
 
     /**
      * Shared database connection for this DAO.
@@ -86,6 +96,62 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             return loan;
 
         } catch (SQLException e) {
+            // Translate common constraint failures into clearer messages.
+            String sqlState = e.getSQLState();
+
+            if (SQLSTATE_FOREIGN_KEY_VIOLATION.equals(sqlState)) {
+                // Likely: book_id or member_id does not exist.
+                boolean bookOk = bookExists(loan.getBookId());
+                boolean memberOk = memberExists(loan.getMemberId());
+
+                log.warn("FK violation while saving loan (bookId={}, memberId={}). bookExists={}, memberExists={}",
+                        loan.getBookId(), loan.getMemberId(), bookOk, memberOk, e);
+
+                if (!bookOk && !memberOk) {
+                    throw new IllegalArgumentException(
+                            "Invalid IDs: bookId=" + loan.getBookId() + " and memberId=" + loan.getMemberId() + " do not exist.",
+                            e
+                    );
+                }
+                if (!bookOk) {
+                    throw new IllegalArgumentException(
+                            "Invalid bookId: no book exists with id=" + loan.getBookId() + ".",
+                            e
+                    );
+                }
+                if (!memberOk) {
+                    throw new IllegalArgumentException(
+                            "Invalid memberId: no member exists with id=" + loan.getMemberId() + ".",
+                            e
+                    );
+                }
+
+                // Both exist: unexpected FK failure (race condition, schema mismatch, etc.)
+                throw new IllegalArgumentException(
+                        "Foreign key violation while saving loan (bookId=" + loan.getBookId()
+                                + ", memberId=" + loan.getMemberId() + ").",
+                        e
+                );
+            }
+
+            if (SQLSTATE_NOT_NULL_VIOLATION.equals(sqlState)) {
+                log.warn("NOT NULL violation while saving loan (bookId={}, memberId={}).",
+                        loan.getBookId(), loan.getMemberId(), e);
+                throw new IllegalArgumentException("Missing required loan field (a NOT NULL constraint was violated).", e);
+            }
+
+            if (SQLSTATE_CHECK_VIOLATION.equals(sqlState)) {
+                log.warn("CHECK violation while saving loan (bookId={}, memberId={}, checkoutDate={}, dueDate={}, returnDate={}).",
+                        loan.getBookId(), loan.getMemberId(), loan.getCheckoutDate(), loan.getDueDate(), loan.getReturnDate(), e);
+                throw new IllegalArgumentException("Loan failed a database CHECK constraint (verify dates/values).", e);
+            }
+
+            if (SQLSTATE_UNIQUE_VIOLATION.equals(sqlState)) {
+                log.warn("UNIQUE violation while saving loan (bookId={}, memberId={}).",
+                        loan.getBookId(), loan.getMemberId(), e);
+                throw new IllegalArgumentException("Loan violates a UNIQUE constraint in the database.", e);
+            }
+
             log.error("SQL error while saving loan (bookId={}, memberId={}).",
                     loan.getBookId(), loan.getMemberId(), e);
             throw new RuntimeException("Failed to save loan", e);
@@ -199,6 +265,58 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
             log.info("Loan updated successfully (id={}).", loan.getId());
 
         } catch (SQLException e) {
+            // Same constraint translations as save() so callers get clean messages.
+            String sqlState = e.getSQLState();
+
+            if (SQLSTATE_FOREIGN_KEY_VIOLATION.equals(sqlState)) {
+                boolean bookOk = bookExists(loan.getBookId());
+                boolean memberOk = memberExists(loan.getMemberId());
+
+                log.warn("FK violation while updating loan (id={}, bookId={}, memberId={}). bookExists={}, memberExists={}",
+                        loan.getId(), loan.getBookId(), loan.getMemberId(), bookOk, memberOk, e);
+
+                if (!bookOk && !memberOk) {
+                    throw new IllegalArgumentException(
+                            "Invalid IDs: bookId=" + loan.getBookId() + " and memberId=" + loan.getMemberId() + " do not exist.",
+                            e
+                    );
+                }
+                if (!bookOk) {
+                    throw new IllegalArgumentException(
+                            "Invalid bookId: no book exists with id=" + loan.getBookId() + ".",
+                            e
+                    );
+                }
+                if (!memberOk) {
+                    throw new IllegalArgumentException(
+                            "Invalid memberId: no member exists with id=" + loan.getMemberId() + ".",
+                            e
+                    );
+                }
+
+                throw new IllegalArgumentException(
+                        "Foreign key violation while updating loan (bookId=" + loan.getBookId()
+                                + ", memberId=" + loan.getMemberId() + ").",
+                        e
+                );
+            }
+
+            if (SQLSTATE_NOT_NULL_VIOLATION.equals(sqlState)) {
+                log.warn("NOT NULL violation while updating loan (id={}).", loan.getId(), e);
+                throw new IllegalArgumentException("Missing required loan field (a NOT NULL constraint was violated).", e);
+            }
+
+            if (SQLSTATE_CHECK_VIOLATION.equals(sqlState)) {
+                log.warn("CHECK violation while updating loan (id={}, checkoutDate={}, dueDate={}, returnDate={}).",
+                        loan.getId(), loan.getCheckoutDate(), loan.getDueDate(), loan.getReturnDate(), e);
+                throw new IllegalArgumentException("Loan failed a database CHECK constraint (verify dates/values).", e);
+            }
+
+            if (SQLSTATE_UNIQUE_VIOLATION.equals(sqlState)) {
+                log.warn("UNIQUE violation while updating loan (id={}).", loan.getId(), e);
+                throw new IllegalArgumentException("Loan violates a UNIQUE constraint in the database.", e);
+            }
+
             log.error("SQL error while updating loan id={}.", loan.getId(), e);
             throw new RuntimeException("Failed to update loan id=" + loan.getId(), e);
         }
@@ -552,6 +670,54 @@ public class LoanDAO implements BaseDAO<LoanEntity> {
         } catch (SQLException e) {
             log.error("SQL error while deleting returned loanId={}.", loanId, e);
             throw new RuntimeException("Failed to delete returned loan id=" + loanId, e);
+        }
+    }
+
+    /* =========================================================
+       FK-target existence checks (used for better error messages)
+       ========================================================= */
+
+    /**
+     * Checks whether a book exists by id.
+     */
+    private boolean bookExists(long bookId) {
+        final String sql = """
+            SELECT 1
+            FROM books
+            WHERE id = ?
+            LIMIT 1
+            """;
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while checking book existence for id={}.", bookId, e);
+            throw new RuntimeException("Failed to check existence for book id=" + bookId, e);
+        }
+    }
+
+    /**
+     * Checks whether a member exists by id.
+     */
+    private boolean memberExists(long memberId) {
+        final String sql = """
+            SELECT 1
+            FROM members
+            WHERE id = ?
+            LIMIT 1
+            """;
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, memberId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            log.error("SQL error while checking member existence for id={}.", memberId, e);
+            throw new RuntimeException("Failed to check existence for member id=" + memberId, e);
         }
     }
 

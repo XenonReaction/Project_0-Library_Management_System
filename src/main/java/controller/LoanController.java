@@ -14,7 +14,11 @@ import java.util.Optional;
 /**
  * Controller for all console-based Loan operations.
  *
- * <p>Responsibilities:
+ * <p><b>Role in architecture:</b> The controller layer is responsible for console I/O
+ * (menus, prompts, printing results) and per-field validation of user input. It delegates
+ * cross-field rules and persistence coordination to the {@link LoanService}.</p>
+ *
+ * <h2>Primary responsibilities</h2>
  * <ul>
  *   <li>Display the Loan Services menu and route user choices to operations</li>
  *   <li>Prompt for user input using {@link InputUtil}</li>
@@ -22,29 +26,27 @@ import java.util.Optional;
  *   <li>Delegate business rules and persistence coordination to {@link LoanService}</li>
  * </ul>
  *
- * <p>This class focuses on console I/O and per-field validation. Cross-field business rules
- * (e.g., "book cannot be checked out twice") should live in the service layer.
+ * <h2>Error handling</h2>
+ * <p>{@link LoanService} allows {@link IllegalArgumentException} to bubble up for “clean”
+ * DB constraint violations translated by the DAO (e.g., FK violations from invalid bookId/memberId).
+ * This controller catches those and prints the message for user-friendly feedback.</p>
  */
 public class LoanController {
 
+    /** Logger for controller-level flow and user-visible operations. */
     private static final Logger log = LoggerFactory.getLogger(LoanController.class);
 
+    /** Service dependency containing business rules and persistence coordination. */
     private final LoanService loanService;
 
-    /**
-     * Default loan length in days when the user chooses the default option during checkout.
-     */
+    /** Default loan duration (days) used when user enters 0. */
     private static final int DEFAULT_LOAN_DAYS = 14;
 
-    /**
-     * Upper bound on loan length (sanity cap) to prevent unrealistic due dates.
-     */
+    /** Upper bound for a loan duration (days) to prevent unrealistic values. */
     private static final int MAX_LOAN_DAYS = 3650;
 
     /**
-     * Constructs a {@code LoanController} using a default {@link LoanService}.
-     *
-     * <p>Used in the normal application flow where dependency injection is not required.
+     * Constructs a {@code LoanController} using the default {@link LoanService}.
      */
     public LoanController() {
         this.loanService = new LoanService();
@@ -52,14 +54,13 @@ public class LoanController {
     }
 
     /**
-     * Constructs a {@code LoanController} using an injected {@link LoanService}.
+     * Constructs a {@code LoanController} with an injected {@link LoanService}.
      *
-     * <p>Primarily intended for unit tests where {@code LoanService} may be mocked.
+     * <p>Useful for unit testing (e.g., providing a mocked service).</p>
      *
-     * @param loanService service instance to use (must not be null)
+     * @param loanService service dependency (must not be null)
      * @throws IllegalArgumentException if {@code loanService} is null
      */
-    // Optional: for unit tests (inject a mocked service)
     public LoanController(LoanService loanService) {
         if (loanService == null) {
             log.error("Attempted to initialize LoanController with null LoanService.");
@@ -72,8 +73,9 @@ public class LoanController {
     /**
      * Runs the Loan Services menu loop until the user chooses to exit back to the main menu.
      *
-     * <p>Menu actions are protected by a try/catch to keep the application resilient against
-     * invalid input or unexpected runtime failures.
+     * <p>This method is the entry point called by the main menu controller.
+     * It handles menu display, routing, and a general exception boundary so the
+     * application stays interactive even if an unexpected error occurs.</p>
      */
     public void handleInput() {
         log.info("Entered Loan Services menu.");
@@ -120,7 +122,7 @@ public class LoanController {
                     }
                     case 0 -> {
                         log.info("Exiting Loan Services menu.");
-                        running = false; // no pause here
+                        running = false;
                     }
                     default -> {
                         log.warn("Invalid Loan menu option selected: {}", choice);
@@ -155,18 +157,18 @@ public class LoanController {
     }
 
     /**
-     * Prompts the user to press Enter so the UI doesn't immediately repaint the menu.
+     * Pauses the console until the user presses Enter.
      *
-     * <p>Uses {@link InputUtil#readLineAllowEmpty(String)} to allow an empty line without validation.
+     * <p>This improves the UX by letting the user read results before the menu redraws.</p>
      */
     private void pressEnterToContinue() {
         InputUtil.readLineAllowEmpty("Press Enter to continue...");
     }
 
     /**
-     * Retrieves all loans from the service layer and prints them to the console.
+     * Lists all loans currently stored (returned + active).
      *
-     * <p>If no loans exist, prints a friendly message instead of printing nothing.
+     * <p>Calls {@link LoanService#getAll()} and prints each loan using its {@code toString()}.</p>
      */
     private void listAllLoans() {
         log.info("Listing all loans.");
@@ -193,72 +195,101 @@ public class LoanController {
     /**
      * Checks out a book by creating a new loan.
      *
-     * <p>Workflow:
-     * <ol>
-     *   <li>Prompt for and validate book ID and member ID</li>
-     *   <li>Prompt for and normalize loan length (days)</li>
-     *   <li>Derive checkout date (today) and due date (today + loanDays)</li>
-     *   <li>Validate derived dates defensively using {@link LoanValidator}</li>
-     *   <li>Delegate to {@link LoanService#checkout(Loan)}</li>
-     * </ol>
+     * <p><b>User flow:</b> Prompts for book ID, member ID, and loan length (days), then uses the
+     * current date as checkout date and computes the due date.</p>
      *
-     * <p>Business rules (e.g., "book already checked out") are expected to be enforced by the service layer
-     * and may surface as {@link IllegalStateException}.
+     * <p><b>Re-prompt behavior:</b> If the user enters IDs that look valid but do not exist,
+     * the DAO (via service) throws an {@link IllegalArgumentException} with a specific message.
+     * For those “missing ID” messages, this method loops and re-prompts so the user can correct
+     * the entry without being kicked back to the menu.</p>
+     *
+     * <p><b>Business rule violations</b> (e.g., book already checked out) are typically surfaced
+     * as {@link IllegalStateException} and cause a return back to the menu.</p>
      */
     private void checkoutBook() {
         log.info("Checkout Book operation started.");
         System.out.println();
         System.out.println("=== CHECKOUT BOOK ===");
 
-        try {
-            long bookId = promptValidBookIdCheckout();
-            long memberId = promptValidMemberIdCheckout();
+        while (true) {
+            try {
+                long bookId = promptValidBookIdCheckout();
+                long memberId = promptValidMemberIdCheckout();
+                int loanDays = promptLoanLengthDaysCheckout();
 
-            // uses LoanValidator.normalizeLoanLengthDays(...)
-            int loanDays = promptLoanLengthDaysCheckout();
+                LocalDate checkoutDate = LocalDate.now();
+                LocalDate dueDate = checkoutDate.plusDays(loanDays);
 
-            LocalDate checkoutDate = LocalDate.now();
-            LocalDate dueDate = checkoutDate.plusDays(loanDays);
+                // Defensive validation of derived dates
+                LoanValidator.requireValidCheckoutDate(checkoutDate);
+                LoanValidator.requireValidDueDate(dueDate, checkoutDate);
 
-            // Validate derived dates against constraints (defensive)
-            LoanValidator.requireValidCheckoutDate(checkoutDate);
-            LoanValidator.requireValidDueDate(dueDate, checkoutDate);
+                log.debug(
+                        "Checkout validated input - bookId={}, memberId={}, loanDays={}, checkoutDate={}, dueDate={}",
+                        bookId, memberId, loanDays, checkoutDate, dueDate
+                );
 
-            log.debug(
-                    "Checkout validated input - bookId={}, memberId={}, loanDays={}, checkoutDate={}, dueDate={}",
-                    bookId, memberId, loanDays, checkoutDate, dueDate
-            );
+                Loan loan = new Loan();
+                loan.setBookId(bookId);
+                loan.setMemberId(memberId);
+                loan.setCheckoutDate(checkoutDate);
+                loan.setDueDate(dueDate);
+                loan.setReturnDate(null);
 
-            Loan loan = new Loan();
-            loan.setBookId(bookId);
-            loan.setMemberId(memberId);
-            loan.setCheckoutDate(checkoutDate);
-            loan.setDueDate(dueDate);
-            loan.setReturnDate(null);
+                Long id = loanService.checkout(loan);
 
-            Long id = loanService.checkout(loan);
+                log.info("Checkout successful. Created loan id={}", id);
+                System.out.println("Checkout successful. Created loan id=" + id);
+                System.out.println("Due date: " + dueDate);
+                return;
 
-            log.info("Checkout successful. Created loan id={}", id);
-            System.out.println("Checkout successful. Created loan id=" + id);
-            System.out.println("Due date: " + dueDate);
+            } catch (IllegalStateException ex) {
+                log.warn("Checkout blocked by business rule: {}", ex.getMessage());
+                System.out.println("Checkout blocked: " + ex.getMessage());
+                return;
 
-        } catch (IllegalStateException ex) {
-            // policy violations from LoanService (book already checked out, etc.)
-            log.warn("Checkout blocked by business rule: {}", ex.getMessage());
-            System.out.println("Checkout blocked: " + ex.getMessage());
-        } catch (IllegalArgumentException ex) {
-            log.warn("Validation error during checkout: {}", ex.getMessage());
-            System.out.println("Could not checkout book: " + ex.getMessage());
-        } catch (RuntimeException ex) {
-            log.error("Unexpected error during checkout.", ex);
-            System.out.println("Could not checkout book: " + ex.getMessage());
+            } catch (IllegalArgumentException ex) {
+                String msg = ex.getMessage() == null ? "" : ex.getMessage();
+
+                log.warn("Checkout rejected: {}", msg);
+                System.out.println("Could not checkout book: " + msg);
+
+                if (isLikelyMissingIdMessage(msg)) {
+                    System.out.println("Please re-enter the IDs.");
+                    System.out.println();
+                    continue;
+                }
+
+                return;
+
+            } catch (RuntimeException ex) {
+                log.error("Unexpected error during checkout.", ex);
+                System.out.println("Could not checkout book due to an unexpected error.");
+                return;
+            }
         }
     }
 
     /**
-     * Returns a book by setting the return date on an existing loan.
+     * Heuristic helper to detect DAO/service messages that indicate missing FK targets.
      *
-     * <p>Uses today's date as the return date and delegates to {@link LoanService#returnLoan(long, LocalDate)}.
+     * <p>This keeps the controller UX smooth by re-prompting IDs for known, correctable cases.</p>
+     *
+     * @param msg exception message (typically from service/DAO)
+     * @return true if the message likely indicates a missing book/member record
+     */
+    private boolean isLikelyMissingIdMessage(String msg) {
+        String m = msg.toLowerCase();
+        return m.contains("no book exists")
+                || m.contains("no member exists")
+                || (m.contains("invalid") && m.contains("does not exist"))
+                || (m.contains("invalid") && (m.contains("bookid") || m.contains("memberid")));
+    }
+
+    /**
+     * Returns a book by closing an active loan (sets return date).
+     *
+     * <p>The return date is set to {@link LocalDate#now()}.</p>
      */
     private void returnBook() {
         System.out.println();
@@ -282,14 +313,15 @@ public class LoanController {
         } catch (IllegalArgumentException ex) {
             log.warn("Validation error during return: {}", ex.getMessage());
             System.out.println("Could not return loan: " + ex.getMessage());
+
         } catch (RuntimeException ex) {
             log.error("Unexpected error during return.", ex);
-            System.out.println("Could not return loan: " + ex.getMessage());
+            System.out.println("Could not return loan due to an unexpected error.");
         }
     }
 
     /**
-     * Prompts for a loan ID, fetches the loan from the service layer, and prints it if found.
+     * Finds and prints a loan by its ID.
      */
     private void findLoanById() {
         System.out.println();
@@ -316,9 +348,10 @@ public class LoanController {
     }
 
     /**
-     * Deletes a loan if permitted by the service layer.
+     * Deletes a loan by its ID.
      *
-     * <p>Services may block deleting "active" loans (not yet returned), surfacing an {@link IllegalStateException}.
+     * <p>Service policy typically allows deletion only for returned loans
+     * (active loans are preserved).</p>
      */
     private void deleteLoan() {
         System.out.println();
@@ -336,9 +369,7 @@ public class LoanController {
                 log.info("Loan not deleted for id={} (not found or blocked by policy).", id);
                 System.out.println("Loan not deleted (not found or cannot delete an active loan). id=" + id);
             }
-        } catch (IllegalStateException ex) {
-            log.warn("Delete blocked by business rule: {}", ex.getMessage());
-            System.out.println("Delete blocked: " + ex.getMessage());
+
         } catch (RuntimeException ex) {
             log.error("Error deleting loan with id={}", id, ex);
             System.out.println("Error deleting loan.");
@@ -346,7 +377,7 @@ public class LoanController {
     }
 
     /**
-     * Lists active loans (loans without a return date) by delegating to the service layer.
+     * Lists all active (unreturned) loans.
      */
     private void listActiveLoans() {
         log.info("Listing active loans.");
@@ -372,8 +403,6 @@ public class LoanController {
 
     /**
      * Lists all loans for a specific member ID.
-     *
-     * <p>Prompts for the member ID and delegates the lookup to the service layer.
      */
     private void listLoansByMember() {
         System.out.println();
@@ -396,6 +425,7 @@ public class LoanController {
         } catch (IllegalArgumentException ex) {
             log.warn("Validation error listing loans by member: {}", ex.getMessage());
             System.out.println("Invalid member id: " + ex.getMessage());
+
         } catch (RuntimeException ex) {
             log.error("Error retrieving loans for memberId={}", memberId, ex);
             System.out.println("Error retrieving loans for member.");
@@ -403,9 +433,10 @@ public class LoanController {
     }
 
     /**
-     * Lists overdue loans as of today by delegating to the service layer.
+     * Lists all overdue loans as of today.
      *
-     * <p>"Overdue" is typically defined as: return date is null and due date is before the provided date.
+     * <p>Overdue rules are enforced in the service/repository query:
+     * typically {@code return_date IS NULL AND due_date < currentDate}.</p>
      */
     private void listOverdueLoans() {
         System.out.println();
@@ -437,9 +468,9 @@ public class LoanController {
     // -------------------------------------------------------------------------
 
     /**
-     * Prompts for a Book ID during checkout and validates it using {@link LoanValidator}.
+     * Prompts until the user enters a valid positive book ID for checkout.
      *
-     * @return validated book ID (> 0)
+     * @return validated book ID
      */
     private long promptValidBookIdCheckout() {
         while (true) {
@@ -454,9 +485,9 @@ public class LoanController {
     }
 
     /**
-     * Prompts for a Member ID during checkout and validates it using {@link LoanValidator}.
+     * Prompts until the user enters a valid positive member ID for checkout.
      *
-     * @return validated member ID (> 0)
+     * @return validated member ID
      */
     private long promptValidMemberIdCheckout() {
         while (true) {
@@ -471,14 +502,12 @@ public class LoanController {
     }
 
     /**
-     * Prompts for loan length in days and normalizes it using {@link LoanValidator}.
+     * Prompts for loan length in days.
      *
-     * <p>Sentinel behavior:
-     * <ul>
-     *   <li>0 -> default loan length ({@link #DEFAULT_LOAN_DAYS})</li>
-     * </ul>
+     * <p>If the user enters {@code 0}, the controller uses {@link #DEFAULT_LOAN_DAYS}.
+     * The final result is validated and normalized by {@link LoanValidator}.</p>
      *
-     * @return normalized, validated loan length in days
+     * @return normalized loan length in days
      */
     private int promptLoanLengthDaysCheckout() {
         while (true) {
@@ -493,9 +522,9 @@ public class LoanController {
     }
 
     /**
-     * Prompts for a Loan ID to return.
+     * Prompts until a positive loan ID is entered for the return flow.
      *
-     * @return validated loan ID (> 0)
+     * @return positive loan ID
      */
     private long promptValidLoanIdReturn() {
         while (true) {
@@ -510,9 +539,9 @@ public class LoanController {
     }
 
     /**
-     * Prompts for a Loan ID to find.
+     * Prompts until a positive loan ID is entered for the find flow.
      *
-     * @return validated loan ID (> 0)
+     * @return positive loan ID
      */
     private long promptValidLoanIdFind() {
         while (true) {
@@ -527,9 +556,9 @@ public class LoanController {
     }
 
     /**
-     * Prompts for a Loan ID to delete.
+     * Prompts until a positive loan ID is entered for the delete flow.
      *
-     * @return validated loan ID (> 0)
+     * @return positive loan ID
      */
     private long promptValidLoanIdDelete() {
         while (true) {
@@ -544,9 +573,9 @@ public class LoanController {
     }
 
     /**
-     * Prompts for a Member ID when listing loans by member and validates it using {@link LoanValidator}.
+     * Prompts until the user enters a valid positive member ID for listing loans by member.
      *
-     * @return validated member ID (> 0)
+     * @return validated member ID
      */
     private long promptValidMemberIdListByMember() {
         while (true) {
