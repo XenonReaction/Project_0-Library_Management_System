@@ -42,23 +42,40 @@ public class BookController {
                 log.debug("Book menu selection received: {}", choice);
 
                 switch (choice) {
-                    case 1 -> listAllBooks();
-                    case 2 -> addBook();
-                    case 3 -> findBookById();
-                    case 4 -> updateBook();
-                    case 5 -> deleteBook();
+                    case 1 -> {
+                        listAllBooks();
+                        pressEnterToContinue();
+                    }
+                    case 2 -> {
+                        addBook();
+                        pressEnterToContinue();
+                    }
+                    case 3 -> {
+                        findBookById();
+                        pressEnterToContinue();
+                    }
+                    case 4 -> {
+                        updateBook();
+                        pressEnterToContinue();
+                    }
+                    case 5 -> {
+                        deleteBook();
+                        pressEnterToContinue();
+                    }
                     case 0 -> {
                         log.info("Exiting Book Services menu.");
-                        running = false;
+                        running = false; // no pause here
                     }
                     default -> {
                         log.warn("Invalid Book menu option selected: {}", choice);
                         System.out.println("Invalid option. Please try again.");
+                        pressEnterToContinue();
                     }
                 }
             } catch (Exception ex) {
                 log.error("Unhandled exception in BookController menu loop.", ex);
                 System.out.println("An unexpected error occurred. Please try again.");
+                pressEnterToContinue();
             }
         }
     }
@@ -72,7 +89,12 @@ public class BookController {
         System.out.println("3. Find book by ID");
         System.out.println("4. Update a book");
         System.out.println("5. Delete a book");
-        System.out.println("0. Back");
+        System.out.println("0. Back to Main Menu");
+    }
+
+    private void pressEnterToContinue() {
+        // Keeps the menu from immediately re-printing after an operation.
+        InputUtil.readLineAllowEmpty("Press Enter to continue...");
     }
 
     private void listAllBooks() {
@@ -198,7 +220,7 @@ public class BookController {
         System.out.println("=== DELETE BOOK ===");
 
         long id = InputUtil.readInt("Book ID to delete: ");
-        log.debug("Delete Book requested for id={}", id);
+        log.debug("Delete Book requested: id={}", id);
 
         try {
             boolean deleted = bookService.delete(id);

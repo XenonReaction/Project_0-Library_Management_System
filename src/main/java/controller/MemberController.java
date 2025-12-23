@@ -42,23 +42,40 @@ public class MemberController {
                 log.debug("Member menu selection received: {}", choice);
 
                 switch (choice) {
-                    case 1 -> listAllMembers();
-                    case 2 -> addMember();
-                    case 3 -> findMemberById();
-                    case 4 -> updateMember();
-                    case 5 -> deleteMember();
+                    case 1 -> {
+                        listAllMembers();
+                        pressEnterToContinue();
+                    }
+                    case 2 -> {
+                        addMember();
+                        pressEnterToContinue();
+                    }
+                    case 3 -> {
+                        findMemberById();
+                        pressEnterToContinue();
+                    }
+                    case 4 -> {
+                        updateMember();
+                        pressEnterToContinue();
+                    }
+                    case 5 -> {
+                        deleteMember();
+                        pressEnterToContinue();
+                    }
                     case 0 -> {
                         log.info("Exiting Member Services menu.");
-                        running = false;
+                        running = false; // no pause here
                     }
                     default -> {
                         log.warn("Invalid Member menu option selected: {}", choice);
                         System.out.println("Invalid option. Please try again.");
+                        pressEnterToContinue();
                     }
                 }
             } catch (Exception ex) {
                 log.error("Unhandled exception in MemberController menu loop.", ex);
                 System.out.println("An unexpected error occurred. Please try again.");
+                pressEnterToContinue();
             }
         }
     }
@@ -72,7 +89,11 @@ public class MemberController {
         System.out.println("3. Find member by ID");
         System.out.println("4. Update a member");
         System.out.println("5. Delete a member");
-        System.out.println("0. Back");
+        System.out.println("0. Back to Main Menu");
+    }
+
+    private void pressEnterToContinue() {
+        InputUtil.readLineAllowEmpty("Press Enter to continue...");
     }
 
     private void listAllMembers() {

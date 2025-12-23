@@ -43,26 +43,52 @@ public class LoanController {
                 log.debug("Loan menu selection received: {}", choice);
 
                 switch (choice) {
-                    case 1 -> listAllLoans();
-                    case 2 -> checkoutBook();
-                    case 3 -> returnBook();
-                    case 4 -> findLoanById();
-                    case 5 -> deleteLoan();
-                    case 6 -> listActiveLoans();
-                    case 7 -> listLoansByMember();
-                    case 8 -> listOverdueLoans();
+                    case 1 -> {
+                        listAllLoans();
+                        pressEnterToContinue();
+                    }
+                    case 2 -> {
+                        checkoutBook();
+                        pressEnterToContinue();
+                    }
+                    case 3 -> {
+                        returnBook();
+                        pressEnterToContinue();
+                    }
+                    case 4 -> {
+                        findLoanById();
+                        pressEnterToContinue();
+                    }
+                    case 5 -> {
+                        deleteLoan();
+                        pressEnterToContinue();
+                    }
+                    case 6 -> {
+                        listActiveLoans();
+                        pressEnterToContinue();
+                    }
+                    case 7 -> {
+                        listLoansByMember();
+                        pressEnterToContinue();
+                    }
+                    case 8 -> {
+                        listOverdueLoans();
+                        pressEnterToContinue();
+                    }
                     case 0 -> {
                         log.info("Exiting Loan Services menu.");
-                        running = false;
+                        running = false; // no pause here
                     }
                     default -> {
                         log.warn("Invalid Loan menu option selected: {}", choice);
                         System.out.println("Invalid option. Please try again.");
+                        pressEnterToContinue();
                     }
                 }
             } catch (Exception ex) {
                 log.error("Unhandled exception in LoanController menu loop.", ex);
                 System.out.println("An unexpected error occurred. Please try again.");
+                pressEnterToContinue();
             }
         }
     }
@@ -79,7 +105,11 @@ public class LoanController {
         System.out.println("6. List active loans");
         System.out.println("7. List loans by member");
         System.out.println("8. List overdue loans");
-        System.out.println("0. Back");
+        System.out.println("0. Back to Main Menu");
+    }
+
+    private void pressEnterToContinue() {
+        InputUtil.readLineAllowEmpty("Press Enter to continue...");
     }
 
     private void listAllLoans() {

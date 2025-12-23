@@ -46,6 +46,16 @@ public class InputUtil {
         }
     }
 
+    // Read string allowing empty input (no validation)
+    public static String readLineAllowEmpty(String prompt) {
+        System.out.print(prompt);
+        String input = scanner.nextLine();
+
+        log.debug("User entered raw line input (allow empty): '{}'", input);
+
+        return input;
+    }
+
     // Cleanup method called only when app exits
     public static void close() {
         log.info("Closing input scanner.");
